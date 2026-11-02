@@ -71,3 +71,9 @@ export function reach(shape: Shape, r: number): number {
 
 /** the area of an outline, for tests */
 export const outlineArea = area;
+
+/** the furthest the outline reaches from its centre, in any direction, as a multiple of r */
+export function extent(shape: Shape): number {
+  const pts = outline(shape, 1);
+  return pts ? Math.max(...pts.map((p) => Math.hypot(p.x, p.y))) : 1;
+}

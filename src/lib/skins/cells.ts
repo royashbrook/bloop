@@ -1,7 +1,9 @@
 // the "cells" skin: life from tiny to huge. each tier is a pastel blob with a face
 // and one small hint of what it is. radii are fractions of the jar width, growing
 // smoothly (r = 0.028 + 0.172 * (i/10)^1.25) to a whale 40% of the jar across.
-import { body, dot, face, inside, line, shade, shine } from "./blob.ts";
+// every hint stays inside the circle (a fin or a tail is drawn on the body, not
+// sticking out), so the round edge you see is the edge that touches.
+import { blobFace, body, dot, inside, line, shade, shine } from "./blob.ts";
 import type { Skin, Tier } from "./types.ts";
 
 const T = Math.PI * 2;
@@ -20,20 +22,22 @@ const tiers: Tier[] = [
       ctx.strokeStyle = "rgba(255,255,255,0.85)";
       ctx.stroke();
       dot(ctx, x + Math.cos(-0.5) * r * 0.8, y + Math.sin(-0.5) * r * 0.8, Math.max(1, r * 0.12), "#ffffff");
-      face(ctx, x, y, r, 0.12);
     },
+    face: { y: 0.12 },
   },
   {
     name: "molecule",
     radius: 0.038,
     colour: "#ffd5a3",
     draw(ctx, x, y, r) {
-      // three little atoms stuck on, drawn behind the body
-      for (const a of [-2.3, -0.8, 1.1]) body(ctx, x + Math.cos(a) * r * 0.78, y + Math.sin(a) * r * 0.78, r * 0.3, shade(this.colour, -0.25));
-      body(ctx, x, y, r * 0.94, this.colour);
+      body(ctx, x, y, r, this.colour);
+      // three little atoms stuck on round the rim
+      inside(ctx, x, y, r, () => {
+        for (const a of [-2.3, -0.8, 1.1]) body(ctx, x + Math.cos(a) * r * 0.78, y + Math.sin(a) * r * 0.78, r * 0.3, shade(this.colour, -0.25));
+      });
       shine(ctx, x, y, r);
-      face(ctx, x, y, r * 0.94, 0.05);
     },
+    face: { y: 0.05, s: 0.9 },
   },
   {
     name: "spore",
@@ -46,7 +50,6 @@ const tiers: Tier[] = [
       for (const [dx, dy] of [[-0.55, 0.45], [0.5, 0.5], [0.05, -0.7], [0.62, -0.2], [-0.6, -0.25]])
         dot(ctx, x + dx * r, y + dy * r, Math.max(0.8, r * 0.07), s);
       shine(ctx, x, y, r);
-      face(ctx, x, y, r);
     },
   },
   {
@@ -63,8 +66,8 @@ const tiers: Tier[] = [
       ctx.stroke();
       dot(ctx, x + r * 0.42, y + r * 0.5, r * 0.16, shade(this.colour, 0.3));
       shine(ctx, x, y, r);
-      face(ctx, x, y, r, -0.05);
     },
+    face: { y: -0.05 },
   },
   {
     name: "amoeba",
@@ -76,7 +79,6 @@ const tiers: Tier[] = [
       dot(ctx, x - r * 0.48, y + r * 0.45, r * 0.12, shade(this.colour, 0.25));
       dot(ctx, x + r * 0.5, y - r * 0.5, r * 0.08, shade(this.colour, 0.2));
       shine(ctx, x, y, r);
-      face(ctx, x, y, r);
     },
   },
   {
@@ -91,8 +93,8 @@ const tiers: Tier[] = [
         const a = (i / 7) * T + 0.3;
         body(ctx, x + Math.cos(a) * r * 0.7, y + Math.sin(a) * r * 0.7, r * 0.17, c);
       }
-      face(ctx, x, y, r * 0.85);
     },
+    face: { s: 0.85 },
   },
   {
     name: "jellyfish",
@@ -113,41 +115,45 @@ const tiers: Tier[] = [
         ctx.fill();
       });
       shine(ctx, x, y, r);
-      face(ctx, x, y, r, -0.1);
     },
+    face: { y: -0.1 },
   },
   {
     name: "tadpole",
     radius: 0.138,
     colour: "#dcbcf7",
     draw(ctx, x, y, r) {
-      // a wiggly tail out the back
-      ctx.beginPath();
-      ctx.moveTo(x + r * 0.7, y - r * 0.3);
-      ctx.quadraticCurveTo(x + r * 1.25, y - r * 0.05, x + r * 1.18, y + r * 0.42);
-      ctx.quadraticCurveTo(x + r * 1.0, y + r * 0.1, x + r * 0.7, y + r * 0.3);
-      ctx.closePath();
-      ctx.fillStyle = shade(this.colour, 0.15);
-      ctx.fill();
       body(ctx, x, y, r, this.colour);
+      // a wiggly tail curling round the back
+      inside(ctx, x, y, r, () => {
+        ctx.beginPath();
+        ctx.moveTo(x + r * 0.45, y - r * 0.35);
+        ctx.quadraticCurveTo(x + r * 1.05, y - r * 0.2, x + r * 0.9, y + r * 0.45);
+        ctx.quadraticCurveTo(x + r * 0.8, y + r * 0.1, x + r * 0.45, y + r * 0.3);
+        ctx.closePath();
+        ctx.fillStyle = shade(this.colour, 0.15);
+        ctx.fill();
+      });
       shine(ctx, x, y, r);
-      face(ctx, x - r * 0.12, y, r);
     },
+    face: { x: -0.14, s: 0.92 },
   },
   {
     name: "fish",
     radius: 0.158,
     colour: "#ffbfa6",
     draw(ctx, x, y, r) {
-      // a tail fin behind, a small side fin in front
-      ctx.beginPath();
-      ctx.moveTo(x + r * 0.8, y);
-      ctx.lineTo(x + r * 1.2, y - r * 0.32);
-      ctx.lineTo(x + r * 1.2, y + r * 0.32);
-      ctx.closePath();
-      ctx.fillStyle = shade(this.colour, 0.15);
-      ctx.fill();
       body(ctx, x, y, r, this.colour);
+      // a tail fin at the back, a small side fin in front
+      inside(ctx, x, y, r, () => {
+        ctx.beginPath();
+        ctx.moveTo(x + r * 0.55, y);
+        ctx.lineTo(x + r * 1.0, y - r * 0.42);
+        ctx.lineTo(x + r * 1.0, y + r * 0.42);
+        ctx.closePath();
+        ctx.fillStyle = shade(this.colour, 0.15);
+        ctx.fill();
+      });
       ctx.beginPath();
       ctx.moveTo(x + r * 0.15, y + r * 0.42);
       ctx.quadraticCurveTo(x + r * 0.5, y + r * 0.35, x + r * 0.55, y + r * 0.62);
@@ -155,8 +161,8 @@ const tiers: Tier[] = [
       ctx.fillStyle = shade(this.colour, 0.18);
       ctx.fill();
       shine(ctx, x, y, r);
-      face(ctx, x - r * 0.15, y, r * 0.95);
     },
+    face: { x: -0.17, s: 0.9 },
   },
   {
     name: "turtle",
@@ -180,35 +186,34 @@ const tiers: Tier[] = [
           ctx.stroke();
         }
       });
-      face(ctx, x, y, r * 0.85, 0.35);
     },
+    face: { y: 0.3, s: 0.85 },
   },
   {
     name: "whale",
     radius: 0.2,
     colour: "#9cc4ee",
     draw(ctx, x, y, r) {
-      // a spout above, a lighter belly, a fluke behind
-      ctx.beginPath();
-      ctx.moveTo(x + r * 0.85, y + r * 0.1);
-      ctx.quadraticCurveTo(x + r * 1.18, y - r * 0.1, x + r * 1.2, y - r * 0.38);
-      ctx.quadraticCurveTo(x + r * 1.0, y - r * 0.25, x + r * 0.8, y - r * 0.2);
-      ctx.closePath();
-      ctx.fillStyle = shade(this.colour, 0.15);
-      ctx.fill();
+      // a lighter belly, a fluke at the back, a spout on top: all on the body
       body(ctx, x, y, r, this.colour);
       inside(ctx, x, y, r, () => {
         ctx.beginPath();
         ctx.ellipse(x, y + r * 0.95, r * 0.95, r * 0.55, 0, 0, T);
         ctx.fillStyle = shade(this.colour, -0.45);
         ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(x + r * 0.6, y + r * 0.05);
+        ctx.quadraticCurveTo(x + r * 0.95, y - r * 0.1, x + r * 0.98, y - r * 0.4);
+        ctx.quadraticCurveTo(x + r * 0.8, y - r * 0.25, x + r * 0.6, y - r * 0.2);
+        ctx.closePath();
+        ctx.fillStyle = shade(this.colour, 0.15);
+        ctx.fill();
       });
-      for (const [dx, dy, s] of [[-0.12, -1.18, 0.09], [0.08, -1.28, 0.07], [0, -1.12, 0.1]])
+      for (const [dx, dy, s] of [[-0.1, -0.74, 0.08], [0.08, -0.82, 0.065], [0, -0.66, 0.09]])
         dot(ctx, x + dx * r, y + dy * r, r * s, shade(this.colour, -0.3));
       shine(ctx, x, y, r);
-      face(ctx, x, y, r);
     },
   },
 ];
 
-export const cells: Skin = { id: "cells", name: "cells", tiers };
+export const cells: Skin = { id: "cells", name: "cells", tiers, face: blobFace, spin: true };

@@ -294,6 +294,54 @@ a {
   width: 40px;
   height: 40px;
 }
+/* the looks: one button per look, its name and a few of its pieces */
+.looks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.look {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 8px 12px;
+  text-align: left;
+  border: 3px solid transparent;
+}
+.look.now,
+.look.next {
+  border-color: var(--accent);
+}
+.look-name {
+  font-size: 18px;
+}
+.look-tag {
+  grid-row: 1;
+  grid-column: 2;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--ink-on-accent);
+  font-size: 12px;
+}
+.look-pieces {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.look-pieces canvas {
+  width: 34px;
+  height: 34px;
+}
+.look-note {
+  color: var(--ink-dim);
+}
 .ethos {
   color: var(--ink-dim);
   border-top: 1px solid var(--line);
