@@ -126,7 +126,8 @@ test("the best score survives a reload", async ({ page }) => {
 });
 
 test("a full jar shows the card, and play again starts fresh", async ({ page }) => {
-  test.setTimeout(180000);
+  // a whole game through the page: ~50s locally, and a busy ci runner has taken over 3x that
+  test.setTimeout(480000);
   // a fake clock runs the game as fast as the browser can draw it
   await page.clock.install();
   await page.goto("/?seed=4");
