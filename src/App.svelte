@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import { advance, aim, create, drop, heldX, JAR, snapshot, SPAWN_TIERS, type Game, type Merge } from "./lib/engine/game.ts";
+  import { advance, aim, create, drop, heldX, jiggle, JAR, markJiggle, snapshot, SPAWN_TIERS, type Game, type Merge } from "./lib/engine/game.ts";
+  import { askMotion, shaker } from "./lib/shake.ts";
   import { icon, preview, render, theme, VIEW, MARGIN, BURST_LIFE, type Burst, type Theme } from "./lib/draw.ts";
   import { faces as makeFaces } from "./lib/faces.ts";
   import { SKINS, skinById } from "./lib/skins/index.ts";
@@ -30,8 +31,18 @@
   const stored = Number(readSlot(BEST));
   let best = $state(Number.isSafeInteger(stored) && stored > 0 ? stored : 0);
   let saved = $state(true);
+  // jiggle: off by default, a fun extra. a run played with it on is marked, and
+  // so is a best made in one, so everyone can see it was jiggled.
+  const JIGGLE = "bloop:jiggle";
+  const BEST_JIGGLED = "bloop:best-jiggled";
+  const jiggleSaved = readSlot(JIGGLE) === "1";
+  let jiggleOn = $state(jiggleSaved);
+  let jiggleNote = $state("");
+  let bestJiggled = $state(stored > 0 && readSlot(BEST_JIGGLED) === "1");
+  let jiggled = $state(jiggleSaved);
 
   let game: Game = create(freshSeed(), dims(firstSkin));
+  if (jiggleSaved) markJiggle(game);
   // the game mutates in place; these are what the screen watches
   let score = $state(0);
   let over = $state(false);
@@ -61,9 +72,11 @@
       score = game.score;
       if (score > best) {
         best = score;
-        saved = writeSlot(BEST, String(best));
+        bestJiggled = game.jiggled;
+        saved = writeSlot(BEST, String(best)) && writeSlot(BEST_JIGGLED, bestJiggled ? "1" : "0");
       }
     }
+    jiggled = game.jiggled;
     over = game.over;
     danger = game.danger > 0 && !game.over;
     next = game.next;
@@ -98,6 +111,7 @@
       pending = null;
     }
     game = create(freshSeed(), dims(skin));
+    if (jiggleOn) markJiggle(game);
     faces.reset();
     bursts = [];
     flair = "";
@@ -160,7 +174,40 @@
     if (ctx && look) render(ctx, game, skin, look, scale, bursts, now, faces, still?.matches ?? false);
     raf = requestAnimationFrame(frame);
   }
-  const visibility = () => (last = 0);
+  let visible = $state(true);
+  const visibility = () => {
+    last = 0;
+    visible = !document.hidden;
+  };
+
+  // turning jiggle on is the tap iOS needs to ask for motion; no answer, no jiggle
+  async function toggleJiggle() {
+    if (jiggleOn) {
+      jiggleOn = false;
+      jiggleNote = "";
+      writeSlot(JIGGLE, "0");
+      return;
+    }
+    const answer = await askMotion();
+    if (answer !== "granted") {
+      jiggleNote = answer === "denied" ? "motion was not allowed, so jiggle stays off" : "this device can't jiggle";
+      return;
+    }
+    jiggleOn = true;
+    jiggleNote = "";
+    writeSlot(JIGGLE, "1");
+    markJiggle(game);
+    sync();
+  }
+  // listen for shakes only while it is on and a game is being played in view
+  $effect(() => {
+    if (!jiggleOn || over || sheet || !visible) return;
+    const onMotion = shaker((strength) => {
+      if (jiggle(game, strength)) sync();
+    });
+    addEventListener("devicemotion", onMotion);
+    return () => removeEventListener("devicemotion", onMotion);
+  });
 
   // one thumb: drag anywhere under the hud to aim, let go to drop. a tap drops
   // where it lands. one finger only; buttons never start a drop.
@@ -259,7 +306,10 @@
   <header class="hud">
     <button id="about" class="icon" aria-label="about bloop" onclick={() => (sheet = "about")}>☰</button>
     <div class="stat" id="score"><span>score</span><b>{score}</b></div>
-    <div class="stat" id="best"><span>best</span><b>{best}</b></div>
+    <div class="stat" id="best">
+      <span>best</span>
+      <b>{best}{#if bestJiggled}<svg class="shake-mark" viewBox="0 0 24 24" role="img" aria-label="made with jiggle on"><title>made with jiggle on</title><rect x="8" y="4" width="8" height="16" rx="2" /><path d="M4.5 8q-2 4 0 8M19.5 8q2 4 0 8" /></svg>{/if}</b>
+    </div>
     <div class="next" id="next" aria-label={`next: ${tiers[next].name}`}><canvas bind:this={nextEl}></canvas></div>
     <button id="restart" class="icon" aria-label="start over" onclick={askRestart}>↻</button>
   </header>
@@ -282,6 +332,7 @@
         <h2>jar's full!</h2>
         <p>score <b>{score}</b></p>
         <p>best <b>{best}</b></p>
+        {#if jiggled}<p class="jiggled"><svg class="shake-mark" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="4" width="8" height="16" rx="2" /><path d="M4.5 8q-2 4 0 8M19.5 8q2 4 0 8" /></svg>jiggle on</p>{/if}
         <button id="again" class="big" onclick={restart}>play again</button>
         <button id="over-looks" onclick={() => (sheet = "looks")}>looks</button>
       </div>
@@ -303,6 +354,9 @@
         <p>drag along the jar to aim, let go to drop. two the same touch and <b>bloop</b> into the next one up.</p>
         <p>keep the jar under the dashed line. if something sits above it too long, the jar is full.</p>
         <button id="looks" onclick={() => (sheet = "looks")}>looks: {skin.name}{pending ? ` (next game: ${pending.name})` : ""}</button>
+        <button id="jiggle" role="switch" aria-checked={jiggleOn} onclick={toggleJiggle}>jiggle: {jiggleOn ? "on" : "off"}</button>
+        <p class="hint">shake your phone to jiggle the jar. a score made with jiggle on gets a little mark.</p>
+        {#if jiggleNote}<p class="jiggle-note" role="status">{jiggleNote}</p>{/if}
         {#key skin.id}
           <ul class="ladder" aria-label={`${tiers[0].name} to ${tiers[tiers.length - 1].name}`}>
             {#each tiers as t, i}

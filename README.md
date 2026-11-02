@@ -43,6 +43,11 @@ npm run dev     # vite prints the local url
   made. it is all render-only, so it never changes a game. with reduced motion
   on they hold still (no blink, no glance, no pop or ring), the squint and the
   beam still show. see [faces.ts](src/lib/faces.ts).
+- jiggle, off by default: switch it on in the about sheet and shake the phone
+  to toss the pieces up (on iOS the switch is the tap that asks for motion). it
+  is an input like a drop, seeded, so a replay is the same game, and a shake that
+  spills the pile over the line still fills the jar. a run played with jiggle on,
+  and a best made in one, carry a little phone-shake mark.
 - `?seed=123` plays that exact deal, every game.
 - PWA: offline shell ([sw.ts](src/sw.ts)), an update you accept with one tap,
   install helper. the build shows bottom right.

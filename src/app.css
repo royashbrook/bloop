@@ -342,6 +342,28 @@ a {
 .look-note {
   color: var(--ink-dim);
 }
+/* jiggle: a small phone-shake mark next to a score made with it on */
+.shake-mark {
+  width: 0.7em;
+  height: 0.7em;
+  margin-left: 2px;
+  vertical-align: 0.1em;
+  fill: none;
+  stroke: var(--accent-dim);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+.jiggled {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.hint,
+.jiggle-note {
+  color: var(--ink-dim);
+  font-size: 14px;
+}
 .ethos {
   color: var(--ink-dim);
   border-top: 1px solid var(--line);
