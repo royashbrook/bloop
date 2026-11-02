@@ -20,6 +20,7 @@
   --shadow: 0 3px 0 rgba(61, 50, 48, 0.16);
   --shadow-pressed: 0 1px 0 rgba(61, 50, 48, 0.16);
   --mark-heart: #e5484d;
+  --glass-shine: rgba(255, 255, 255, 0.55);
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
@@ -34,6 +35,7 @@
     --accent-dim: #6aa6d8;
     --line: #3a4560;
     --warn: #ff7d90;
+    --glass-shine: rgba(255, 255, 255, 0.1);
     --shadow: 0 3px 0 rgba(0, 0, 0, 0.45);
     --shadow-pressed: 0 1px 0 rgba(0, 0, 0, 0.45);
   }
@@ -294,6 +296,76 @@ a {
   width: 40px;
   height: 40px;
 }
+/* the looks: one button per look, its name and a few of its pieces */
+.looks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.look {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 8px 12px;
+  text-align: left;
+  border: 3px solid transparent;
+}
+.look.now,
+.look.next {
+  border-color: var(--accent);
+}
+.look-name {
+  font-size: 18px;
+}
+.look-tag {
+  grid-row: 1;
+  grid-column: 2;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--ink-on-accent);
+  font-size: 12px;
+}
+.look-pieces {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.look-pieces canvas {
+  width: 34px;
+  height: 34px;
+}
+.look-note {
+  color: var(--ink-dim);
+}
+/* jiggle: a small phone-shake mark next to a score made with it on */
+.shake-mark {
+  width: 0.7em;
+  height: 0.7em;
+  margin-left: 2px;
+  vertical-align: 0.1em;
+  fill: none;
+  stroke: var(--accent-dim);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+.jiggled {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.hint,
+.jiggle-note {
+  color: var(--ink-dim);
+  font-size: 14px;
+}
 .ethos {
   color: var(--ink-dim);
   border-top: 1px solid var(--line);
@@ -310,13 +382,17 @@ a {
 .row > button {
   flex: 1;
 }
+/* the house colophon: made with <heart> by roy + ai · sponsor me, centred.
+   every row stays centred when it wraps */
 .maker {
   border-top: 1px solid var(--line);
   padding-top: 10px;
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
-  gap: 5px;
+  gap: 0 0.3em;
+  text-align: center;
   font: 13px var(--font-mono);
   color: var(--ink-dim);
 }
@@ -328,9 +404,27 @@ a {
   min-width: 44px;
   color: var(--ink-dim);
 }
-.maker svg {
-  width: 16px;
+.mark-heart {
+  width: 0.85em;
+  height: 0.85em;
   fill: var(--mark-heart);
+}
+.mark-dot {
+  opacity: 0.45;
+}
+/* the dot travels with sponsor me, so a narrow phone wraps "· sponsor me" as one piece */
+.mark-tail {
+  display: inline-flex;
+  align-items: center;
+  gap: 0 0.3em;
+}
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .update {
   position: fixed;

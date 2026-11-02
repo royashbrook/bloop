@@ -213,3 +213,45 @@ test("start over mid-game asks first; keep playing leaves the exact run, start o
   await expect(page.locator("#score b")).toHaveText("0");
   await expect(page.locator("#best b")).toHaveText(best);
 });
+
+// merge on the first touch (#5): a pair that lands with its outlines a hair apart
+// joins. under the old rule (a physics contact only) they sat side by side forever.
+test("two of a kind that land with their outlines touching join", async ({ page }) => {
+  // a wide jar: under a unit per css pixel, so a whole-pixel aim can land inside the 1 unit window
+  await page.setViewportSize({ width: 520, height: 900 });
+  // the two smallest tiers land flat (an even-sided body), so nothing rolls
+  let seed = 1;
+  for (;; seed++) {
+    const g = create(seed, dims(cells));
+    if (g.held === g.next && g.held <= 1) break;
+  }
+  const tier = create(seed, dims(cells)).held;
+  const r = cells.tiers[tier].radius * JAR.width;
+  await page.goto(`/?seed=${seed}`);
+  const box = await page.locator("#jar").boundingBox();
+  const perUnit = box.width / (JAR.width + 20);
+  expect(perUnit).toBeGreaterThan(1.05);
+  const y = box.y + box.height * 0.6;
+  // the first against the left wall
+  await page.mouse.move(box.x + 2, y);
+  await page.mouse.down();
+  await page.mouse.up();
+  await expect.poll(() => state(page).then((s) => s.pieces.length === 1 && Math.abs(s.pieces[0].vy) < 0.01 && s.cooldown === 0)).toBe(true);
+  const first = (await state(page)).pieces[0];
+  // aim the second so its edge sits half a unit from the first one's
+  const want = first.x + 2 * r + 0.5;
+  const guess = Math.round(box.x + (want + 10) * perUnit);
+  await page.mouse.move(guess, y);
+  await page.mouse.down();
+  let best = { gap: Infinity, at: guess };
+  for (let px = guess - 2; px <= guess + 2; px++) {
+    await page.mouse.move(px, y);
+    const gap = (await state(page)).x - first.x - 2 * r;
+    if (gap > 0.05 && gap < 0.95 && Math.abs(gap - 0.5) < Math.abs(best.gap - 0.5)) best = { gap, at: px };
+  }
+  expect(best.gap, "an aim inside the window").toBeLessThan(1);
+  await page.mouse.move(best.at, y);
+  await page.mouse.up();
+  // they do not overlap on the way down, so only the touch rule can join them
+  await expect.poll(() => state(page).then((s) => s.pieces.map((p) => p.tier)), { timeout: 5000 }).toEqual([tier + 1]);
+});

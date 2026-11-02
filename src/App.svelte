@@ -1,29 +1,67 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import { advance, aim, create, drop, heldX, JAR, snapshot, SPAWN_TIERS, type Game, type Merge } from "./lib/engine/game.ts";
-  import { preview, render, theme, VIEW, MARGIN, BURST_LIFE, type Burst, type Theme } from "./lib/draw.ts";
-  import { DEFAULT_SKIN } from "./lib/skins/index.ts";
-  import { dims } from "./lib/skins/types.ts";
+  import { advance, aim, create, drop, heldX, jiggle, JAR, markJiggle, snapshot, SPAWN_TIERS, type Game, type Merge } from "./lib/engine/game.ts";
+  import { askMotion, shaker } from "./lib/shake.ts";
+  import { icon, preview, render, theme, VIEW, MARGIN, BURST_LIFE, type Burst, type Theme } from "./lib/draw.ts";
+  import { faces as makeFaces } from "./lib/faces.ts";
+  import { SKINS, skinById } from "./lib/skins/index.ts";
+  import { dims, type Skin } from "./lib/skins/types.ts";
   import { readSlot, writeSlot } from "./lib/storage.ts";
   import { installControl } from "./install.ts";
   import { updateControl, type UpdateCheck } from "./pwa.ts";
 
   const ETHOS =
     "no ads, no lives, no timers, nothing to buy, no accounts, no cookies, nothing sold or shared.";
-  const skin = DEFAULT_SKIN;
-  const tiers = skin.tiers;
+  // the look: saved, restored on reload. sizes differ per look, so a change
+  // mid-game waits for the next game; an empty or finished jar switches at once.
+  const LOOK = "bloop:look";
+  const firstSkin = skinById(readSlot(LOOK));
+  // raw: a look is fixed data, compared by identity, never a reactive copy
+  let skin = $state.raw<Skin>(firstSkin);
+  let pending = $state.raw<Skin | null>(null);
+  const tiers = $derived(skin.tiers);
+  const faces = makeFaces();
 
   // ?seed=123 plays that exact deal every game, so a run can be shared and replayed
   const q = new URLSearchParams(location.search);
   const fixedSeed = /^\d{1,9}$/.test(q.get("seed") ?? "") ? Number(q.get("seed")) : null;
+  // { score, jiggled } from the one record. a plain number is the older save (v0, and
+  // v1 before this), whose mark lived in its own key.
+  function readBest(): { score: number; jiggled: boolean } {
+    const raw = readSlot("bloop:best");
+    const none = { score: 0, jiggled: false };
+    if (raw === null) return none;
+    const legacy = Number(raw);
+    if (raw.trim() !== "" && Number.isSafeInteger(legacy))
+      return legacy > 0 ? { score: legacy, jiggled: readSlot("bloop:best-jiggled") === "1" } : none;
+    try {
+      const v = JSON.parse(raw);
+      const n = Number(v?.score);
+      return Number.isSafeInteger(n) && n > 0 ? { score: n, jiggled: v.jiggled === true } : none;
+    } catch {
+      return none;
+    }
+  }
+
   const freshSeed = () => fixedSeed ?? crypto.getRandomValues(new Uint32Array(1))[0];
 
+  // the best score and whether jiggle was on for it are one record, written in one
+  // go, so a failed write can never keep the score and lose its mark
   const BEST = "bloop:best";
-  const stored = Number(readSlot(BEST));
-  let best = $state(Number.isSafeInteger(stored) && stored > 0 ? stored : 0);
+  const firstBest = readBest();
+  let best = $state(firstBest.score);
   let saved = $state(true);
+  // jiggle: off by default, a fun extra. a run played with it on is marked, and
+  // so is a best made in one, so everyone can see it was jiggled.
+  const JIGGLE = "bloop:jiggle";
+  const jiggleSaved = readSlot(JIGGLE) === "1";
+  let jiggleOn = $state(jiggleSaved);
+  let jiggleNote = $state("");
+  let bestJiggled = $state(firstBest.jiggled);
+  let jiggled = $state(jiggleSaved);
 
-  let game: Game = create(freshSeed(), dims(skin));
+  let game: Game = create(freshSeed(), dims(firstSkin));
+  if (jiggleSaved) markJiggle(game);
   // the game mutates in place; these are what the screen watches
   let score = $state(0);
   let over = $state(false);
@@ -31,7 +69,7 @@
   let next = $state(game.next);
   let flair = $state("");
   let flairKey = $state(0);
-  let sheet = $state<"" | "about" | "ios" | "restart">("");
+  let sheet = $state<"" | "about" | "ios" | "restart" | "looks">("");
 
   let jarEl = $state<HTMLCanvasElement>();
   let nextEl = $state<HTMLCanvasElement>();
@@ -42,16 +80,22 @@
   });
 
   // a read-only window onto the game, for tests and the curious
-  (window as unknown as { __bloop: unknown }).__bloop = { state: () => snapshot(game) };
+  (window as unknown as { __bloop: unknown }).__bloop = {
+    state: () => snapshot(game),
+    look: () => ({ now: skin.id, next: pending?.id ?? null }),
+    faces: () => faces.report(game),
+  };
 
   function sync() {
     if (score !== game.score) {
       score = game.score;
       if (score > best) {
         best = score;
-        saved = writeSlot(BEST, String(best));
+        bestJiggled = game.jiggled;
+        saved = writeSlot(BEST, JSON.stringify({ score: best, jiggled: bestJiggled }));
       }
     }
+    jiggled = game.jiggled;
     over = game.over;
     danger = game.danger > 0 && !game.over;
     next = game.next;
@@ -61,7 +105,7 @@
   let flairTimer: ReturnType<typeof setTimeout>;
   function celebrate(m: Merge, now: number) {
     const t = tiers[m.tier];
-    bursts.push({ x: m.x, y: m.y, r: t.radius * JAR.width, colour: t.colour, at: now });
+    bursts.push({ x: m.x, y: m.y, r: game.radii[m.tier], colour: t.colour, at: now });
     let line = "";
     if (m.vanish) line = `two ${t.name}s! bloop! +${m.points}`;
     else if (m.first && m.tier >= SPAWN_TIERS) line = `nice! ${t.name} made!`;
@@ -81,11 +125,27 @@
   }
 
   function restart() {
+    if (pending) {
+      skin = pending;
+      pending = null;
+    }
     game = create(freshSeed(), dims(skin));
+    if (jiggleOn) markJiggle(game);
+    faces.reset();
     bursts = [];
     flair = "";
     pointer = null;
     sync();
+  }
+
+  /** pick a look: now if the jar is empty or finished, otherwise with the next game */
+  function pickLook(s: Skin) {
+    writeSlot(LOOK, s.id);
+    if (game.drops === 0 || game.over) {
+      skin = s;
+      pending = null;
+      restart();
+    } else pending = s === skin ? null : s;
   }
 
   // the canvas fills the space it is given, at the screen's real pixel density
@@ -110,15 +170,11 @@
     nextEl.width = nextEl.height = Math.round(48 * dpr);
     preview(nextEl.getContext("2d")!, skin, next);
   });
-  // a small picture of a tier, for the ladder in the about sheet
-  function tierIcon(el: HTMLCanvasElement, tier: number) {
+  // a small picture of a tier, for the ladder and the looks
+  function tierIcon(el: HTMLCanvasElement, [look, tier, size]: [Skin, number, number]) {
     const dpr = Math.min(3, window.devicePixelRatio || 1);
-    el.width = el.height = Math.round(40 * dpr);
-    const ctx = el.getContext("2d")!;
-    const r = tiers[tier].radius * JAR.width;
-    const s = (el.width * 0.36) / r;
-    ctx.setTransform(s, 0, 0, s, el.width / 2, el.height / 2);
-    tiers[tier].draw(ctx, 0, 0, r);
+    el.width = el.height = Math.round(size * dpr);
+    icon(el.getContext("2d")!, look, tier);
   }
 
   // real time in, fixed 1/60 s steps out (the engine keeps the accumulator).
@@ -134,10 +190,43 @@
     }
     bursts = bursts.filter((b) => now - b.at < BURST_LIFE);
     const ctx = jarEl?.getContext("2d");
-    if (ctx && look) render(ctx, game, skin, look, scale, bursts, now);
+    if (ctx && look) render(ctx, game, skin, look, scale, bursts, now, faces, still?.matches ?? false);
     raf = requestAnimationFrame(frame);
   }
-  const visibility = () => (last = 0);
+  let visible = $state(true);
+  const visibility = () => {
+    last = 0;
+    visible = !document.hidden;
+  };
+
+  // turning jiggle on is the tap iOS needs to ask for motion; no answer, no jiggle
+  async function toggleJiggle() {
+    if (jiggleOn) {
+      jiggleOn = false;
+      jiggleNote = "";
+      writeSlot(JIGGLE, "0");
+      return;
+    }
+    const answer = await askMotion();
+    if (answer !== "granted") {
+      jiggleNote = answer === "denied" ? "motion was not allowed, so jiggle stays off" : "this device can't jiggle";
+      return;
+    }
+    jiggleOn = true;
+    jiggleNote = "";
+    writeSlot(JIGGLE, "1");
+    markJiggle(game);
+    sync();
+  }
+  // listen for shakes only while it is on and a game is being played in view
+  $effect(() => {
+    if (!jiggleOn || over || sheet || !visible) return;
+    const onMotion = shaker((strength) => {
+      if (jiggle(game, strength)) sync();
+    });
+    addEventListener("devicemotion", onMotion);
+    return () => removeEventListener("devicemotion", onMotion);
+  });
 
   // one thumb: drag anywhere under the hud to aim, let go to drop. a tap drops
   // where it lands. one finger only; buttons never start a drop.
@@ -201,12 +290,15 @@
 
   let observer: ResizeObserver | undefined;
   let dark: MediaQueryList | undefined;
+  // prefers-reduced-motion: faces hold still (no blink, no glance), no pop, no ring
+  let still: MediaQueryList | undefined;
   const repaint = () => (look = theme());
   onMount(() => {
     install = installControl((v) => (installVisible = v), () => (sheet = "ios"));
     updates = updateControl(() => (updateReady = true));
     addEventListener("keydown", key);
     document.addEventListener("visibilitychange", visibility);
+    still = matchMedia("(prefers-reduced-motion: reduce)");
     dark = matchMedia("(prefers-color-scheme: dark)");
     dark.addEventListener("change", repaint);
     repaint();
@@ -233,7 +325,10 @@
   <header class="hud">
     <button id="about" class="icon" aria-label="about bloop" onclick={() => (sheet = "about")}>☰</button>
     <div class="stat" id="score"><span>score</span><b>{score}</b></div>
-    <div class="stat" id="best"><span>best</span><b>{best}</b></div>
+    <div class="stat" id="best">
+      <span>best</span>
+      <b>{best}{#if bestJiggled}<svg class="shake-mark" viewBox="0 0 24 24" role="img" aria-label="made with jiggle on"><title>made with jiggle on</title><rect x="8" y="4" width="8" height="16" rx="2" /><path d="M4.5 8q-2 4 0 8M19.5 8q2 4 0 8" /></svg>{/if}</b>
+    </div>
     <div class="next" id="next" aria-label={`next: ${tiers[next].name}`}><canvas bind:this={nextEl}></canvas></div>
     <button id="restart" class="icon" aria-label="start over" onclick={askRestart}>↻</button>
   </header>
@@ -256,7 +351,9 @@
         <h2>jar's full!</h2>
         <p>score <b>{score}</b></p>
         <p>best <b>{best}</b></p>
+        {#if jiggled}<p class="jiggled"><svg class="shake-mark" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="4" width="8" height="16" rx="2" /><path d="M4.5 8q-2 4 0 8M19.5 8q2 4 0 8" /></svg>jiggle on</p>{/if}
         <button id="again" class="big" onclick={restart}>play again</button>
+        <button id="over-looks" onclick={() => (sheet = "looks")}>looks</button>
       </div>
     {/if}
   </div>
@@ -275,11 +372,17 @@
         <h2>bloop</h2>
         <p>drag along the jar to aim, let go to drop. two the same touch and <b>bloop</b> into the next one up.</p>
         <p>keep the jar under the dashed line. if something sits above it too long, the jar is full.</p>
-        <ul class="ladder" aria-label="atom to whale">
-          {#each tiers as t, i}
-            <li><canvas use:tierIcon={i}></canvas>{t.name}</li>
-          {/each}
-        </ul>
+        <button id="looks" onclick={() => (sheet = "looks")}>looks: {skin.name}{pending ? ` (next game: ${pending.name})` : ""}</button>
+        <button id="jiggle" role="switch" aria-checked={jiggleOn} onclick={toggleJiggle}>jiggle: {jiggleOn ? "on" : "off"}</button>
+        <p class="hint">shake your phone to jiggle the jar. a score made with jiggle on gets a little mark.</p>
+        {#if jiggleNote}<p class="jiggle-note" role="status">{jiggleNote}</p>{/if}
+        {#key skin.id}
+          <ul class="ladder" aria-label={`${tiers[0].name} to ${tiers[tiers.length - 1].name}`}>
+            {#each tiers as t, i}
+              <li><canvas use:tierIcon={[skin, i, 40]}></canvas>{t.name}</li>
+            {/each}
+          </ul>
+        {/key}
         <p class="ethos">{ETHOS}</p>
         <p class="version">version {__APP_VERSION__}</p>
         <div class="row">
@@ -288,15 +391,34 @@
         </div>
         {#if updateNote}<p role="status">{updateNote}</p>{/if}
         <p><a class="licences" href="/licenses.md" target="_blank" rel="noopener">licences</a></p>
-        <div class="maker">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21 3 12C-4 4 6-3 12 5 18-3 28 4 21 12Z" /></svg>
-          made with love by
-          <a href="https://royashbrook.com" target="_blank" rel="noopener">roy</a>
-          +
+        <p class="maker">made with <svg aria-hidden="true" class="mark-heart" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" /></svg><span class="sr">love</span> by
+          <a href="https://royashbrook.com" target="_blank" rel="noopener">roy</a> +
           <a href="https://royashbrook.com/agents" target="_blank" rel="noopener">ai</a>
-          ·
-          <a href="https://github.com/sponsors/royashbrook" target="_blank" rel="noopener">sponsor me</a>
-        </div>
+          <span class="mark-tail"><span aria-hidden="true" class="mark-dot">·</span>
+          <a href="https://github.com/sponsors/royashbrook" target="_blank" rel="noopener">sponsor me</a></span></p>
+      {:else if sheet === "looks"}
+        <h2>looks</h2>
+        <ul class="looks">
+          {#each SKINS as s (s.id)}
+            <li>
+              <button
+                id={`look-${s.id}`}
+                class="look"
+                class:now={s === skin}
+                class:next={s === pending}
+                aria-pressed={(pending ?? skin) === s}
+                onclick={() => pickLook(s)}
+              >
+                <span class="look-name">{s.name}</span>
+                <span class="look-pieces" aria-hidden="true">
+                  {#each [0, 2, 4, 7] as i (i)}<canvas use:tierIcon={[s, i, 34]}></canvas>{/each}
+                </span>
+                {#if s === pending}<span class="look-tag">next game</span>{:else if s === skin && !pending}<span class="look-tag">on</span>{:else if s === skin}<span class="look-tag">this game</span>{/if}
+              </button>
+            </li>
+          {/each}
+        </ul>
+        {#if pending}<p class="look-note" role="status">{pending.name} starts with your next game. this jar keeps going.</p>{/if}
       {:else if sheet === "restart"}
         <h2>start over?</h2>
         <p>this jar goes away. your best score stays.</p>
