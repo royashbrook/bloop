@@ -190,6 +190,16 @@ function remove(g: Game, piece: Live) {
   g.live.splice(g.live.indexOf(piece), 1);
 }
 
+/**
+ * put a settled piece straight into the jar, outside the rules: for tests and
+ * tools that need a known pile. play never calls it.
+ */
+export function place(g: Game, tier: number, x: number, y: number): number {
+  const piece = spawn(g, tier, x, y, false);
+  piece.age = GRACE;
+  return piece.id;
+}
+
 /** drop the held piece where it is aimed. false while cooling down or over. */
 export function drop(g: Game): boolean {
   if (g.over || g.cooldown > 0) return false;

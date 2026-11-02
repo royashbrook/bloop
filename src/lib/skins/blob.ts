@@ -7,8 +7,8 @@ const INK = "#3d3230";
 export function shade(hex: string, amount: number): string {
   const n = parseInt(hex.slice(1), 16);
   const to = amount > 0 ? 0 : 255, k = Math.abs(amount);
-  const c = [16, 8, 0].map((s) => Math.round(((n >> s) & 255) * (1 - k) + to * k));
-  return `rgb(${c[0]},${c[1]},${c[2]})`;
+  // hex in, hex out, so a shade can be shaded again
+  return "#" + [16, 8, 0].map((s) => Math.round(((n >> s) & 255) * (1 - k) + to * k).toString(16).padStart(2, "0")).join("");
 }
 
 export const line = (r: number) => Math.max(1, r * 0.07);
