@@ -20,6 +20,7 @@
   --shadow: 0 3px 0 rgba(61, 50, 48, 0.16);
   --shadow-pressed: 0 1px 0 rgba(61, 50, 48, 0.16);
   --mark-heart: #e5484d;
+  --glass-shine: rgba(255, 255, 255, 0.55);
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
@@ -34,6 +35,7 @@
     --accent-dim: #6aa6d8;
     --line: #3a4560;
     --warn: #ff7d90;
+    --glass-shine: rgba(255, 255, 255, 0.1);
     --shadow: 0 3px 0 rgba(0, 0, 0, 0.45);
     --shadow-pressed: 0 1px 0 rgba(0, 0, 0, 0.45);
   }

@@ -13,12 +13,13 @@ export interface Theme {
   line: string;
   dim: string;
   warn: string;
+  shine: string;
 }
 
 export function theme(): Theme {
   const css = getComputedStyle(document.documentElement);
   const v = (name: string) => css.getPropertyValue(name).trim();
-  return { sunk: v("--surface-sunk"), line: v("--line"), dim: v("--ink-dim"), warn: v("--warn") };
+  return { sunk: v("--surface-sunk"), line: v("--line"), dim: v("--ink-dim"), warn: v("--warn"), shine: v("--glass-shine") };
 }
 
 /** a ring that grows and fades where a merge happened */
@@ -90,6 +91,7 @@ export function render(
   ctx.roundRect(0, 0, W, H, [0, 0, 22, 22]);
   ctx.fillStyle = look.sunk;
   ctx.fill();
+  glass(ctx, look);
 
   // the line: dashed and quiet, red and pulsing while something sits above it
   ctx.save();
@@ -145,16 +147,91 @@ export function render(
   // walls over everything, open at the rim
   const L = -5, R = W + 5, B = H + 5, round = 26;
   ctx.beginPath();
-  ctx.moveTo(L, 4);
+  ctx.moveTo(L, NECK);
   ctx.lineTo(L, B - round);
   ctx.arcTo(L, B, L + round, B, round);
   ctx.lineTo(R - round, B);
   ctx.arcTo(R, B, R, B - round, round);
-  ctx.lineTo(R, 4);
+  ctx.lineTo(R, NECK);
   ctx.lineWidth = 8;
   ctx.lineCap = "round";
   ctx.strokeStyle = look.line;
   ctx.stroke();
+  lip(ctx, look);
+}
+
+// the look of a jar, drawn only: the walls, the floor and the line stay where
+// the physics has them. a threaded neck, a thick rounded lip, a glass shine and a
+// little label, all behind the pieces (or outside the walls) so pieces read clearly.
+
+/** the threaded neck runs from the rim down to here */
+const NECK = 30;
+
+function glass(ctx: CanvasRenderingContext2D, look: Theme) {
+  const { width: W, height: H } = JAR;
+  ctx.save();
+  // the neck: a deeper band of glass, a thick rim along the top, two screw threads
+  ctx.beginPath();
+  ctx.rect(0, 0, W, NECK);
+  ctx.fillStyle = look.line;
+  ctx.globalAlpha = 0.35;
+  ctx.fill();
+  ctx.globalAlpha = 0.9;
+  ctx.beginPath();
+  ctx.roundRect(-10, 0, W + 20, 8, 4);
+  ctx.fill();
+  ctx.globalAlpha = 0.7;
+  ctx.strokeStyle = look.line;
+  ctx.lineWidth = 4;
+  ctx.lineCap = "round";
+  for (const y of [14, 23]) {
+    ctx.beginPath();
+    ctx.moveTo(2, y + 2);
+    ctx.quadraticCurveTo(W / 2, y - 3, W - 2, y + 2);
+    ctx.stroke();
+  }
+  // a shoulder where the neck meets the body
+  ctx.globalAlpha = 0.45;
+  ctx.beginPath();
+  ctx.moveTo(0, NECK);
+  ctx.lineTo(W, NECK);
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  // glass shine: two soft streaks down the left, a short one low on the right
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = look.shine;
+  for (const [x, y, w, h] of [[12, 110, 9, 300], [27, 140, 4, 150], [W - 18, H - 150, 5, 90]]) {
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, w / 2);
+    ctx.fill();
+  }
+  // a little label, faint, low on the glass
+  const lw = 112, lh = 40, lx = (W - lw) / 2, ly = H * 0.56;
+  ctx.globalAlpha = 0.5;
+  ctx.beginPath();
+  ctx.roundRect(lx, ly, lw, lh, 12);
+  ctx.fillStyle = look.line;
+  ctx.fill();
+  ctx.globalAlpha = 0.6;
+  ctx.fillStyle = look.dim;
+  ctx.font = "700 22px ui-rounded, 'SF Pro Rounded', system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("bloop", W / 2, ly + lh / 2 + 1);
+  ctx.restore();
+}
+
+/** a thick rounded lip on top of each wall, the rim of the jar */
+function lip(ctx: CanvasRenderingContext2D, look: Theme) {
+  const { width: W } = JAR;
+  ctx.save();
+  ctx.fillStyle = look.line;
+  for (const x of [-10, W]) {
+    ctx.beginPath();
+    ctx.roundRect(x, 0, 10, NECK, 5);
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 /** the next piece, centred in a small canvas */
