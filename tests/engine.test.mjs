@@ -300,3 +300,100 @@ test("a merge says when it makes a tier this game has not seen yet", () => {
   run(g, 1);
   assert.deepEqual(g.merges.map((m) => [m.tier, m.first]), [[6, false]]);
 });
+
+// merge on the first touch (#5): two of a kind join as soon as their outlines meet
+const pin = (g, id) => Matter.Body.setStatic(g.live.find((p) => p.id === id).body, true);
+
+test("two of a kind resting with their outlines half a unit apart join within two steps", () => {
+  for (const t of [0, 3, 7]) {
+    const g = create(12, DIMS);
+    const x = JAR.width / 2 - r(t) - 0.25;
+    place(g, t, x, floorY(t));
+    place(g, t, x + r(t) * 2 + 0.5, floorY(t));
+    const merges = run(g, 2);
+    assert.deepEqual(merges.map((m) => m.tier), [t + 1], `tier ${t}`);
+  }
+});
+
+test("two of a kind held three units apart never join", () => {
+  for (const t of [0, 3, 7]) {
+    const g = create(13, DIMS);
+    const x = JAR.width / 2 - r(t) - 1.5;
+    pin(g, place(g, t, x, floorY(t)));
+    pin(g, place(g, t, x + r(t) * 2 + 3, floorY(t)));
+    assert.equal(run(g, 120).length, 0, `tier ${t}`);
+    assert.equal(pieces(g).length, 2);
+  }
+});
+
+// shapes (#3): a skin may make a tier a square, a hexagon or a triangle
+import { outline, outlineArea, reach, SHAPES } from "../src/lib/engine/shapes.ts";
+const shaped = (shape) => ({ radii: DIMS.radii, shapes: DIMS.radii.map(() => shape) });
+const lowest = (shape, rr) => Math.max(...(outline(shape, rr) ?? [{ y: rr }]).map((p) => p.y));
+
+test("every shape builds a body with the outline the screen draws, as big as its circle", () => {
+  for (const shape of SHAPES) {
+    const g = create(14, shaped(shape));
+    const t = 5, rr = r(t);
+    const id = place(g, t, 200, 300);
+    const body = g.live.find((p) => p.id === id).body;
+    // the same area as the circle it stands in for, within a few percent (a matter circle is a polygon)
+    assert.ok(Math.abs(body.area / (Math.PI * rr * rr) - 1) < 0.03, `${shape} area ${body.area}`);
+    const pts = outline(shape, rr);
+    if (!pts) continue;
+    assert.ok(Math.abs(outlineArea(pts) / (Math.PI * rr * rr) - 1) < 1e-9, `${shape} outline area`);
+    assert.equal(body.vertices.length, pts.length);
+    pts.forEach((p, i) => {
+      assert.ok(Math.abs(body.vertices[i].x - 200 - p.x) < 1e-6 && Math.abs(body.vertices[i].y - 300 - p.y) < 1e-6, `${shape} vertex ${i}`);
+    });
+  }
+});
+
+test("every shape joins on the first touch, and only then", () => {
+  for (const shape of SHAPES) {
+    for (const t of [1, 6]) {
+      const rr = r(t), w = reach(shape, rr), y = JAR.height - lowest(shape, rr);
+      const near = create(15, shaped(shape));
+      place(near, t, 150, y);
+      place(near, t, 150 + 2 * w + 0.5, y);
+      assert.deepEqual(run(near, 2).map((m) => m.tier), [t + 1], `${shape} tier ${t} at 0.5`);
+      const far = create(15, shaped(shape));
+      pin(far, place(far, t, 150, y));
+      pin(far, place(far, t, 150 + 2 * w + 3, y));
+      assert.equal(run(far, 60).length, 0, `${shape} tier ${t} at 3`);
+    }
+  }
+});
+
+test("a dropped shape stays inside the walls, and two dropped together merge", () => {
+  for (const shape of SHAPES) {
+    let seed = 1;
+    while (create(seed, shaped(shape)).held !== create(seed, shaped(shape)).next) seed++;
+    const g = create(seed, shaped(shape));
+    const tier = g.held;
+    aim(g, 0);
+    assert.ok(drop(g));
+    // held against the wall, the whole outline is inside it, not just a circle of its size
+    const left = Math.min(...g.live[0].body.vertices.map((v) => v.x));
+    assert.ok(left >= -1e-9, `${shape} pokes ${-left} into the wall`);
+    wait(g);
+    aim(g, 0);
+    assert.ok(drop(g));
+    const merges = run(g, 240);
+    assert.deepEqual(merges.map((m) => m.tier), [tier + 1], shape);
+    for (const p of pieces(g)) assert.ok(p.x > 0 && p.x < JAR.width, `${shape} inside`);
+  }
+});
+
+test("a shape counts toward the line by the top of its outline", () => {
+  const g = create(16, shaped("triangle"));
+  const t = 3, rr = r(t);
+  // the centre is under the line; the point of the triangle is over it
+  const tip = -Math.min(...outline("triangle", rr).map((p) => p.y));
+  const id = place(g, t, 200, JAR.line + tip - 4);
+  pin(g, id);
+  // as a circle of the same size it would sit wholly under the line
+  assert.ok(JAR.line + tip - 4 - rr > JAR.line);
+  run(g, 130);
+  assert.equal(g.over, true, "the tip over the line fills the jar");
+});

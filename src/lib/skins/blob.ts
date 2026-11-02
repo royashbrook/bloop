@@ -13,29 +13,37 @@ export function shade(hex: string, amount: number): string {
 
 export const line = (r: number) => Math.max(1, r * 0.07);
 
-/** the body: a circle, or a wobbly one with `wobble` bumps */
+/**
+ * the body: a circle, or a wobbly one with `wobble` bumps. the outline is drawn
+ * INSIDE the edge, so the outer edge of the line is the edge physics touches:
+ * fill the shape, clip to it, stroke twice as wide, and the outer half falls away.
+ * nothing a piece draws reaches past r.
+ */
 export function body(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, colour: string, wobble = 0) {
   ctx.beginPath();
   if (!wobble) ctx.arc(x, y, r, 0, Math.PI * 2);
   else
     for (let i = 0; i <= 48; i++) {
       const a = (i / 48) * Math.PI * 2;
-      const rr = r * (0.95 + 0.06 * Math.sin(a * wobble));
+      const rr = r * (0.95 + 0.05 * Math.sin(a * wobble));
       ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
     }
   ctx.closePath();
   ctx.fillStyle = colour;
   ctx.fill();
-  ctx.lineWidth = line(r);
+  ctx.save();
+  ctx.clip();
+  ctx.lineWidth = line(r) * 2;
   ctx.strokeStyle = shade(colour, 0.28);
   ctx.stroke();
+  ctx.restore();
 }
 
-/** keep the next drawing inside the body circle */
+/** keep the next drawing inside the body circle, inside its outline */
 export function inside(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, paint: () => void) {
   ctx.save();
   ctx.beginPath();
-  ctx.arc(x, y, r - line(r) / 2, 0, Math.PI * 2);
+  ctx.arc(x, y, r - line(r), 0, Math.PI * 2);
   ctx.clip();
   paint();
   ctx.restore();
