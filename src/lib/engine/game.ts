@@ -35,6 +35,9 @@ const WALL = 200;
  * one screen pixel on a phone. any touch at all, even edge to edge, is a join.
  */
 export const TOUCH = 1;
+/** a full-strength jiggle: how fast every piece is tossed up, and at most how fast sideways (units per step) */
+export const JIGGLE_UP = 7;
+export const JIGGLE_SIDE = 2.5;
 
 /** score for making tier index k (0-based): the triangular number k(k+1)/2 */
 export const scoreFor = (k: number) => (k * (k + 1)) / 2;
@@ -113,6 +116,10 @@ export interface Game {
   /** the biggest tier this game has made by merging (-1 before the first merge) */
   made: number;
   drops: number;
+  /** jiggle was on at some moment of this run: its score is marked */
+  jiggled: boolean;
+  /** jiggles applied this run */
+  jiggles: number;
   /** merges from the most recent step, for the screen to celebrate */
   merges: Merge[];
   live: Live[];
@@ -120,6 +127,8 @@ export interface Game {
   engine: Matter.Engine;
   byBody: Map<number, Live>;
   random: () => number;
+  /** the jiggle's own seeded stream, so a shake never changes the deal */
+  shake: () => number;
   nextId: number;
   above: number;
   acc: number;
@@ -163,11 +172,14 @@ export function create(seed: number, dims: Dims): Game {
     top: held,
     made: -1,
     drops: 0,
+    jiggled: false,
+    jiggles: 0,
     merges: [],
     live: [],
     engine,
     byBody: new Map(),
     random,
+    shake: rng((seed ^ 0x5bd1e995) >>> 0),
     nextId: 1,
     above: 0,
     acc: 0,
@@ -237,6 +249,34 @@ export function drop(g: Game): boolean {
   g.next = Math.floor(g.random() * SPAWN_TIERS);
   g.cooldown = COOLDOWN;
   g.drops++;
+  return true;
+}
+
+/** mark this run as played with jiggle on. a finished run keeps the mark it had. */
+export function markJiggle(g: Game) {
+  if (!g.over) g.jiggled = true;
+}
+
+/**
+ * shake the jar: every piece is tossed up, and a little sideways from the jiggle's
+ * own seeded stream, so a replay with the same shakes is the same game. it is an
+ * input like drop(): nothing else changes. no piece gets grace back, so a shake
+ * that spills the pile over the line still ends the game. strength is 0 to 1.
+ * false on a finished game (it does nothing then).
+ */
+export function jiggle(g: Game, strength = 1): boolean {
+  if (g.over) return false;
+  const k = clamp(Number.isFinite(strength) ? strength : 0, 0, 1);
+  if (k === 0) return false;
+  for (const p of g.live) {
+    const v = p.body.velocity;
+    Body.setVelocity(p.body, {
+      x: v.x + (g.shake() * 2 - 1) * JIGGLE_SIDE * k,
+      y: v.y - JIGGLE_UP * k * (0.75 + 0.25 * g.shake()),
+    });
+  }
+  g.jiggled = true;
+  g.jiggles++;
   return true;
 }
 
@@ -384,6 +424,8 @@ export function snapshot(g: Game) {
     top: g.top,
     made: g.made,
     drops: g.drops,
+    jiggled: g.jiggled,
+    jiggles: g.jiggles,
     pieces: pieces(g),
   };
 }

@@ -7,7 +7,9 @@ import {
   create,
   drop,
   GRACE,
+  jiggle,
   JAR,
+  markJiggle,
   MAX_MERGES,
   pieces,
   place,
@@ -396,4 +398,93 @@ test("a shape counts toward the line by the top of its outline", () => {
   assert.ok(JAR.line + tip - 4 - rr > JAR.line);
   run(g, 130);
   assert.equal(g.over, true, "the tip over the line fills the jar");
+});
+
+// jiggle (#6): shake the jar. an input like drop(), deterministic, and it never bypasses the line
+/** drop at random until the pile's top is within reach of the line, nothing over it yet */
+function pileUp(seed) {
+  const g = create(seed, DIMS);
+  const hand = rng(seed);
+  for (;;) {
+    if (g.cooldown === 0) {
+      aim(g, hand() * JAR.width);
+      drop(g);
+    }
+    run(g, 150);
+    const top = Math.min(...pieces(g).map((p) => p.y - p.r));
+    assert.ok(!g.over, "the pile overflowed before the test began");
+    if (top - JAR.line < 110 && g.danger === 0) return g;
+  }
+}
+
+test("a jiggle replays exactly for a seed, and never changes the deal", () => {
+  const play = (seed, shakes) => {
+    const g = create(seed, DIMS);
+    const hand = rng(seed * 7 + 1);
+    const deal = [];
+    for (let i = 0; i < 1500; i++) {
+      if (i % 37 === 0) aim(g, hand() * JAR.width);
+      if (i % 41 === 0 && drop(g)) deal.push(g.next);
+      if (shakes && i % 90 === 60) jiggle(g, 0.8);
+      step(g);
+    }
+    return { g, deal };
+  };
+  const a = play(31, true), b = play(31, true), still = play(31, false);
+  assert.ok(a.g.jiggles > 10);
+  assert.deepEqual(snapshot(a.g), snapshot(b.g));
+  // the shake moved things
+  assert.notDeepEqual(snapshot(a.g).pieces, snapshot(still.g).pieces);
+  // but the pieces dealt are the same ones, in the same order
+  assert.deepEqual(a.deal.slice(0, 20), still.deal.slice(0, 20));
+  assert.deepEqual(play(32, true).g.jiggles, a.g.jiggles);
+  assert.notDeepEqual(snapshot(play(32, true).g).pieces, snapshot(a.g).pieces);
+});
+
+test("a jiggle tosses every piece up, and marks the run", () => {
+  const g = create(33, DIMS);
+  place(g, 2, 100, floorY(2));
+  place(g, 6, 300, floorY(6));
+  run(g, 30);
+  assert.equal(g.jiggled, false);
+  assert.ok(jiggle(g, 1));
+  for (const p of pieces(g)) assert.ok(p.vy < -3, `piece ${p.id} tossed up: ${p.vy}`);
+  assert.equal(g.jiggled, true);
+  assert.equal(g.jiggles, 1);
+  assert.equal(snapshot(g).jiggled, true);
+  // strength 0 is no jiggle at all
+  const h = create(33, DIMS);
+  place(h, 2, 100, floorY(2));
+  assert.equal(jiggle(h, 0), false);
+  assert.equal(h.jiggled, false);
+});
+
+test("a run with jiggle switched on is marked, even with no shake", () => {
+  const g = create(34, DIMS);
+  markJiggle(g);
+  assert.equal(snapshot(g).jiggled, true);
+  assert.equal(g.jiggles, 0);
+});
+
+test("a shake that spills the pile over the line still fills the jar", () => {
+  const shaken = pileUp(4);
+  const still = pileUp(4);
+  // a hard, steady shake: a jiggle every quarter second keeps the top of the pile in the air
+  for (let i = 0; i < 600 && !shaken.over; i++) {
+    if (i % 15 === 0) jiggle(shaken, 1);
+    step(shaken);
+  }
+  run(still, 600);
+  assert.equal(still.over, false, "left alone, this pile is fine");
+  assert.equal(shaken.over, true, "shaken over the line, the jar is full");
+});
+
+test("a jiggle on a finished game does nothing", () => {
+  const { g } = fill(4);
+  assert.ok(g.over);
+  const before = snapshot(g);
+  assert.equal(jiggle(g, 1), false);
+  markJiggle(g);
+  run(g, 30);
+  assert.deepEqual(snapshot(g), before);
 });
