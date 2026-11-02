@@ -31,7 +31,7 @@
   let next = $state(game.next);
   let flair = $state("");
   let flairKey = $state(0);
-  let sheet = $state<"" | "about" | "ios">("");
+  let sheet = $state<"" | "about" | "ios" | "restart">("");
 
   let jarEl = $state<HTMLCanvasElement>();
   let nextEl = $state<HTMLCanvasElement>();
@@ -71,6 +71,13 @@
       clearTimeout(flairTimer);
       flairTimer = setTimeout(() => (flair = ""), 1800);
     }
+  }
+
+  // a game underway asks first, the world holds still while it asks. an empty
+  // jar or a finished one starts over in one tap.
+  function askRestart() {
+    if (game.drops > 0 && !game.over) sheet = "restart";
+    else restart();
   }
 
   function restart() {
@@ -228,7 +235,7 @@
     <div class="stat" id="score"><span>score</span><b>{score}</b></div>
     <div class="stat" id="best"><span>best</span><b>{best}</b></div>
     <div class="next" id="next" aria-label={`next: ${tiers[next].name}`}><canvas bind:this={nextEl}></canvas></div>
-    <button id="restart" class="icon" aria-label="start over" onclick={restart}>↻</button>
+    <button id="restart" class="icon" aria-label="start over" onclick={askRestart}>↻</button>
   </header>
   <div
     class="surface"
@@ -290,11 +297,15 @@
           ·
           <a href="https://github.com/sponsors/royashbrook" target="_blank" rel="noopener">sponsor me</a>
         </div>
+      {:else if sheet === "restart"}
+        <h2>start over?</h2>
+        <p>this jar goes away. your best score stays.</p>
+        <button id="confirm-restart" class="big" onclick={() => { sheet = ""; restart(); }}>start over</button>
       {:else if sheet === "ios"}
         <h2>install bloop</h2>
         <p>in safari, tap the <b>share</b> button, then <b>add to home screen</b>.</p>
       {/if}
-      <button id="close" class="big" onclick={() => (sheet = "")}>back</button>
+      <button id="close" class="big" onclick={() => (sheet = "")}>{sheet === "restart" ? "keep playing" : "back"}</button>
     </div>
   </dialog>
 {/if}

@@ -180,12 +180,35 @@ for (const size of [{ width: 320, height: 568 }, { width: 390, height: 844 }])
     expect(Math.abs(jar.w - jar.css * Math.min(3, dpr))).toBeLessThanOrEqual(1);
   });
 
-test("start over clears the jar and the score", async ({ page }) => {
+test("start over on an empty jar is one tap, no question", async ({ page }) => {
+  await page.goto("/");
+  await page.click("#restart");
+  await expect(page.locator(".sheet")).toHaveCount(0);
+  expect((await state(page)).pieces).toEqual([]);
+});
+
+test("start over mid-game asks first; keep playing leaves the exact run, start over clears it", async ({ page }) => {
   await mergeTwins(page);
   await expect.poll(() => state(page).then((s) => s.score)).toBeGreaterThan(0);
   await page.click("#restart");
+  await expect(page.locator(".sheet h2")).toHaveText("start over?");
+  // the world holds still while it asks
+  const asked = await state(page);
+  await page.waitForTimeout(600);
+  expect(await state(page)).toEqual(asked);
+  await page.click("#close");
+  await expect(page.locator(".sheet")).toHaveCount(0);
+  // the same game and the same deal: seed, drops, held and next all unchanged
+  const kept = await state(page);
+  for (const k of ["seed", "drops", "score", "held", "next", "made"]) expect(kept[k], k).toBe(asked[k]);
+  expect(kept.pieces.map((p) => p.tier)).toEqual(asked.pieces.map((p) => p.tier));
+  const best = await page.locator("#best b").textContent();
+  await page.click("#restart");
+  await page.click("#confirm-restart");
+  await expect(page.locator(".sheet")).toHaveCount(0);
   const s = await state(page);
   expect(s.pieces).toEqual([]);
   expect(s.score).toBe(0);
   await expect(page.locator("#score b")).toHaveText("0");
+  await expect(page.locator("#best b")).toHaveText(best);
 });
