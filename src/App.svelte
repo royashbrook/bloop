@@ -15,8 +15,9 @@
   // mid-game waits for the next game; an empty or finished jar switches at once.
   const LOOK = "bloop:look";
   const firstSkin = skinById(readSlot(LOOK));
-  let skin = $state<Skin>(firstSkin);
-  let pending = $state<Skin | null>(null);
+  // raw: a look is fixed data, compared by identity, never a reactive copy
+  let skin = $state.raw<Skin>(firstSkin);
+  let pending = $state.raw<Skin | null>(null);
   const tiers = $derived(skin.tiers);
   const faces = makeFaces();
 
