@@ -25,20 +25,39 @@
   // ?seed=123 plays that exact deal every game, so a run can be shared and replayed
   const q = new URLSearchParams(location.search);
   const fixedSeed = /^\d{1,9}$/.test(q.get("seed") ?? "") ? Number(q.get("seed")) : null;
+  // { score, jiggled } from the one record. a plain number is the older save (v0, and
+  // v1 before this), whose mark lived in its own key.
+  function readBest(): { score: number; jiggled: boolean } {
+    const raw = readSlot("bloop:best");
+    const none = { score: 0, jiggled: false };
+    if (raw === null) return none;
+    const legacy = Number(raw);
+    if (raw.trim() !== "" && Number.isSafeInteger(legacy))
+      return legacy > 0 ? { score: legacy, jiggled: readSlot("bloop:best-jiggled") === "1" } : none;
+    try {
+      const v = JSON.parse(raw);
+      const n = Number(v?.score);
+      return Number.isSafeInteger(n) && n > 0 ? { score: n, jiggled: v.jiggled === true } : none;
+    } catch {
+      return none;
+    }
+  }
+
   const freshSeed = () => fixedSeed ?? crypto.getRandomValues(new Uint32Array(1))[0];
 
+  // the best score and whether jiggle was on for it are one record, written in one
+  // go, so a failed write can never keep the score and lose its mark
   const BEST = "bloop:best";
-  const stored = Number(readSlot(BEST));
-  let best = $state(Number.isSafeInteger(stored) && stored > 0 ? stored : 0);
+  const firstBest = readBest();
+  let best = $state(firstBest.score);
   let saved = $state(true);
   // jiggle: off by default, a fun extra. a run played with it on is marked, and
   // so is a best made in one, so everyone can see it was jiggled.
   const JIGGLE = "bloop:jiggle";
-  const BEST_JIGGLED = "bloop:best-jiggled";
   const jiggleSaved = readSlot(JIGGLE) === "1";
   let jiggleOn = $state(jiggleSaved);
   let jiggleNote = $state("");
-  let bestJiggled = $state(stored > 0 && readSlot(BEST_JIGGLED) === "1");
+  let bestJiggled = $state(firstBest.jiggled);
   let jiggled = $state(jiggleSaved);
 
   let game: Game = create(freshSeed(), dims(firstSkin));
@@ -73,7 +92,7 @@
       if (score > best) {
         best = score;
         bestJiggled = game.jiggled;
-        saved = writeSlot(BEST, String(best)) && writeSlot(BEST_JIGGLED, bestJiggled ? "1" : "0");
+        saved = writeSlot(BEST, JSON.stringify({ score: best, jiggled: bestJiggled }));
       }
     }
     jiggled = game.jiggled;
