@@ -1,0 +1,358 @@
+/* shell theme tokens: the only place a colour literal lives. dark mode repaints
+   the chrome by redefining the same names; structure never changes. the pieces
+   keep their pastels in both. */
+:root {
+  --surface: #f4f8ff;
+  --surface-raised: #ffffff;
+  --surface-sunk: #e6eef9;
+  --ink: #3d3230;
+  --ink-dim: #6f6a75;
+  --ink-on-accent: #ffffff;
+  --accent: #5c9fd6;
+  --accent-dim: #4384ba;
+  --line: #c9d6e8;
+  --good: #3c9a5f;
+  --warn: #d6455d;
+  --font-ui: ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --radius: 16px;
+  --shadow: 0 3px 0 rgba(61, 50, 48, 0.16);
+  --shadow-pressed: 0 1px 0 rgba(61, 50, 48, 0.16);
+  --mark-heart: #e5484d;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface: #161b26;
+    --surface-raised: #232a3a;
+    --surface-sunk: #1d2433;
+    --ink: #eef1fa;
+    --ink-dim: #a3abc2;
+    --ink-on-accent: #10151f;
+    --accent: #8cc2ee;
+    --accent-dim: #6aa6d8;
+    --line: #3a4560;
+    --warn: #ff7d90;
+    --shadow: 0 3px 0 rgba(0, 0, 0, 0.45);
+    --shadow-pressed: 0 1px 0 rgba(0, 0, 0, 0.45);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  overscroll-behavior: none;
+}
+#app {
+  height: 100dvh;
+  overflow: hidden;
+}
+button {
+  font: 700 16px var(--font-ui);
+  min-height: 48px;
+  min-width: 48px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+button:active {
+  box-shadow: var(--shadow-pressed);
+  transform: translateY(2px);
+}
+button:disabled {
+  opacity: 0.4;
+}
+button:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+button.big {
+  background: var(--accent);
+  color: var(--ink-on-accent);
+  font-size: 20px;
+  min-height: 60px;
+}
+a {
+  color: var(--accent);
+}
+
+/* play */
+.play {
+  height: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: max(8px, env(safe-area-inset-top)) 12px max(6px, env(safe-area-inset-bottom));
+}
+.hud {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.hud .icon {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  font-size: 22px;
+  line-height: 1;
+}
+.stat {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 22px;
+}
+.stat b {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.stat span {
+  font-size: 11px;
+  color: var(--ink-dim);
+}
+.next {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 11px;
+  color: var(--ink-dim);
+}
+.next canvas {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: var(--surface-sunk);
+}
+
+/* one-thumb play: the whole area under the hud takes the gesture */
+.surface {
+  position: relative;
+  min-height: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+#jar {
+  display: block;
+  touch-action: none;
+}
+.flair,
+.careful {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  border-radius: var(--radius);
+  font: 800 18px var(--font-display);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.flair {
+  top: 22%;
+  background: var(--accent);
+  color: var(--ink-on-accent);
+  animation: flair 1.8s ease-out forwards;
+}
+@keyframes flair {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 8px) scale(0.9);
+  }
+  12% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1.05);
+  }
+  20%,
+  80% {
+    transform: translate(-50%, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.careful {
+  top: 2px;
+  font-size: 13px;
+  padding: 3px 10px;
+  background: var(--warn);
+  color: var(--ink-on-accent);
+}
+.over {
+  position: absolute;
+  inset: 18% 8% auto;
+  padding: 20px;
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+  border: 3px solid var(--ink);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: center;
+}
+.over h2 {
+  margin: 0;
+  font: 800 28px var(--font-display);
+}
+.over p {
+  margin: 0;
+  color: var(--ink-dim);
+  font-size: 18px;
+}
+.over p b {
+  color: var(--ink);
+}
+.foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+
+/* sheets, update */
+.sheet {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: transparent;
+  color: var(--ink);
+}
+.sheet::backdrop {
+  background: rgba(0, 0, 0, 0.35);
+}
+.licences {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+.card {
+  width: min(440px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 20px;
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.card h2 {
+  margin: 0;
+  font: 800 26px var(--font-display);
+}
+.card p {
+  margin: 0;
+  line-height: 1.4;
+}
+.ladder {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  color: var(--ink-dim);
+  text-align: center;
+}
+.ladder canvas {
+  display: block;
+  margin: 0 auto 2px;
+  width: 40px;
+  height: 40px;
+}
+.ethos {
+  color: var(--ink-dim);
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+.version {
+  color: var(--ink-dim);
+  font: 13px var(--font-mono);
+}
+.row {
+  display: flex;
+  gap: 10px;
+}
+.row > button {
+  flex: 1;
+}
+.maker {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  font: 13px var(--font-mono);
+  color: var(--ink-dim);
+}
+.maker a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
+  color: var(--ink-dim);
+}
+.maker svg {
+  width: 16px;
+  fill: var(--mark-heart);
+}
+.update {
+  position: fixed;
+  left: 50%;
+  top: max(8px, env(safe-area-inset-top));
+  transform: translateX(-50%);
+  background: var(--accent);
+  color: var(--ink-on-accent);
+  z-index: 7;
+}
+.warn {
+  color: var(--warn);
+}
+
+/* the build, small, like the rest of the house */
+.corner {
+  font: 600 12px var(--font-mono);
+  color: var(--ink-dim);
+  opacity: 0.8;
+}
+@media (prefers-reduced-motion: reduce) {
+  .flair {
+    animation: none;
+  }
+}
