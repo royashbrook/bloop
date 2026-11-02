@@ -25,9 +25,24 @@ npm run dev     # vite prints the local url
   the same game. the engine has no DOM; node tests play whole games headless.
 - one thumb: drag anywhere under the hud to aim, let go to drop, or tap to drop
   there. arrow keys aim, space drops.
-- looks are data: a skin is a list of tiers (name, radius as a fraction of the
-  jar width, colour, a draw function). [cells.ts](src/lib/skins/cells.ts) is the
-  only one so far. a new look is a new file, never an engine change.
+- two of a kind join on the first touch: a live contact, or their outlines
+  within one world unit (about a pixel on a phone). the outline is drawn inside
+  the edge and nothing a piece draws reaches past it, so the edge you see is the
+  edge that touches.
+- looks are data: a skin is a list of tiers (name, size as a fraction of the jar
+  width, colour, shape, a draw function) and a face. four ship: cells, puppies,
+  kitties and shapes ([skins/](src/lib/skins)). a shape is a circle, a rounded
+  square, hexagon or triangle, built by the engine from the same outline the
+  screen draws, with the area of the circle it stands in for. pick a look from
+  the about sheet: an empty or finished jar switches at once, mid-game it waits
+  for the next game. the pick is saved. a new look is a new file, never an
+  engine change.
+- faces come alive and stay upright: the body and its markings may roll, the
+  eyes and mouth never turn. they blink every few seconds, glance at the nearest
+  piece or the one about to drop, squint under a bigger piece and beam when just
+  made. it is all render-only, so it never changes a game. with reduced motion
+  on they hold still (no blink, no glance, no pop or ring), the squint and the
+  beam still show. see [faces.ts](src/lib/faces.ts).
 - `?seed=123` plays that exact deal, every game.
 - PWA: offline shell ([sw.ts](src/sw.ts)), an update you accept with one tap,
   install helper. the build shows bottom right.
@@ -35,12 +50,12 @@ npm run dev     # vite prints the local url
 ## tools
 
 ```sh
-npm test              # engine rules, determinism, a random bot to a full jar
+npm test              # engine rules, determinism, a random bot, looks, faces
 npm run bot           # how far a random bot gets over 20 seeds
 npm run check         # svelte-check
 npm run build         # dist/, with /version.json
 npx playwright install chromium webkit
-npm run test:browser  # phone layout, controls, merge, full jar, offline, updates
+npm run test:browser  # phone layout, controls, merge, looks, faces, full jar, offline, updates
 npm run icons         # regenerate the install pngs from public/icon.svg
 ```
 
