@@ -268,3 +268,19 @@ test("a merge made in the pile counts toward the line at once", () => {
   const [made] = pieces(g);
   assert.ok(made.made && made.age > GRACE);
 });
+
+test("a merge says when it makes a tier this game has not seen yet", () => {
+  const g = create(10, DIMS);
+  const pair = (t, x) => {
+    place(g, t, x, floorY(t));
+    place(g, t, x + r(t) * 2 - 3, floorY(t));
+  };
+  pair(5, r(5));
+  step(g);
+  assert.deepEqual(g.merges.map((m) => [m.tier, m.first]), [[6, true]]);
+  assert.equal(g.top, 6);
+  // the same tier again is no news
+  pair(5, JAR.width - r(5) * 3);
+  run(g, 1);
+  assert.deepEqual(g.merges.map((m) => [m.tier, m.first]), [[6, false]]);
+});
