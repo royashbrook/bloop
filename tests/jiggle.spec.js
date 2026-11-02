@@ -55,7 +55,8 @@ test("allowed: jiggle turns on, marks the run, and a shake tosses the pieces up"
   await answer(page, "granted");
   await page.goto("/");
   await page.keyboard.press("Space");
-  await expect.poll(() => state(page).then((s) => s.pieces.length === 1 && Math.abs(s.pieces[0].vy) < 0.05)).toBe(true);
+  // at rest on the floor (a fresh drop also has no speed, at the top, so check where it is)
+  await expect.poll(() => state(page).then((s) => s.pieces.length === 1 && s.pieces[0].y > 400 && Math.abs(s.pieces[0].vy) < 0.05)).toBe(true);
   expect((await state(page)).jiggled).toBe(false);
   await turnOn(page);
   expect((await state(page)).jiggled).toBe(true);
