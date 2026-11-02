@@ -4,7 +4,7 @@ a merge-drop game for kids. drop little blobs into a jar. two the same touch
 and bloop into the next one up, atom to whale. **no ads, no lives, no timers,
 nothing to buy, no accounts, no cookies, nothing sold or shared.** works offline.
 
-it will live at [bloop.royashbrook.com](https://bloop.royashbrook.com).
+play at [bloop.royashbrook.com](https://bloop.royashbrook.com).
 
 ## play locally
 
