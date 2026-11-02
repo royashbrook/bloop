@@ -224,14 +224,30 @@ test("the jar is full when a settled piece stays above the line for two seconds"
   let streak = 0;
   for (let i = trace.length - 1; i >= 0 && trace[i]; i--) streak++;
   assert.equal(streak, 120);
-  // and earlier warnings that cleared in time did not end it: the clock restarts
-  const episodes = trace.filter((on, i) => on && !trace[i - 1]).length;
-  assert.ok(episodes > 1, `only ${episodes} warning episode(s) on this seed`);
   // nothing moves once it is over
   const frozen = snapshot(g);
   run(g, 60);
   assert.deepEqual(snapshot(g), frozen);
   assert.equal(drop(g), false);
+});
+
+// a piece pinned in place, so the clock is tested without a long physics run
+// that plays out differently on another node version
+test("a warning that clears in time restarts the two second clock", () => {
+  const g = create(1, DIMS);
+  const id = place(g, 0, JAR.width / 2, JAR.line - 20);
+  const body = g.live.find((p) => p.id === id).body;
+  Matter.Body.setStatic(body, true);
+  run(g, 100);
+  assert.ok(g.danger > 0 && !g.over, "over the line, warning up");
+  Matter.Body.setPosition(body, { x: JAR.width / 2, y: JAR.height / 2 });
+  run(g, 1);
+  assert.equal(g.danger, 0, "back under the line, warning gone");
+  Matter.Body.setPosition(body, { x: JAR.width / 2, y: JAR.line - 20 });
+  run(g, 119);
+  assert.equal(g.over, false, "a fresh 2 s, not the 100 steps already spent");
+  run(g, 1);
+  assert.equal(g.over, true);
 });
 
 test("the pile settles: no jitter once the drops stop", () => {
