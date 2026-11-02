@@ -358,13 +358,17 @@ a {
 .row > button {
   flex: 1;
 }
+/* the house colophon: made with <heart> by roy + ai · sponsor me, centred.
+   every row stays centred when it wraps */
 .maker {
   border-top: 1px solid var(--line);
   padding-top: 10px;
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
-  gap: 5px;
+  gap: 0 0.3em;
+  text-align: center;
   font: 13px var(--font-mono);
   color: var(--ink-dim);
 }
@@ -376,9 +380,27 @@ a {
   min-width: 44px;
   color: var(--ink-dim);
 }
-.maker svg {
-  width: 16px;
+.mark-heart {
+  width: 0.85em;
+  height: 0.85em;
   fill: var(--mark-heart);
+}
+.mark-dot {
+  opacity: 0.45;
+}
+/* the dot travels with sponsor me, so a narrow phone wraps "· sponsor me" as one piece */
+.mark-tail {
+  display: inline-flex;
+  align-items: center;
+  gap: 0 0.3em;
+}
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .update {
   position: fixed;

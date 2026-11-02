@@ -130,3 +130,67 @@ test("after one visit it reopens and plays with the server gone", async ({ brows
     await server.close();
   }
 });
+
+// the maker's mark, the house colophon (#8): made with <heart>love by roy + ai · sponsor me,
+// the heart where the word is (the word kept for screen readers), centred, and on a
+// narrow phone the dot wraps with "sponsor me", never stranded at the end of a row
+for (const width of [390, 320])
+  test(`${width} wide: the maker's mark reads in order and sits centred`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto("/");
+    await page.click("#about");
+    const mark = page.locator(".maker");
+    await mark.scrollIntoViewIfNeeded();
+    const read = await mark.evaluate((el) => {
+      const text = el.textContent.replace(/\s+/g, " ").trim();
+      const svg = el.querySelector("svg");
+      const before = [];
+      for (let n = svg?.previousSibling; n; n = n.previousSibling) before.unshift(n.textContent);
+      const after = svg?.nextSibling;
+      const links = [...el.querySelectorAll("a")].map((a) => [a.textContent.trim(), a.getAttribute("href")]);
+      // every visible box on each row, to measure the gaps either side of it
+      const box = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      const left = box.left + parseFloat(style.paddingLeft), right = box.right - parseFloat(style.paddingRight);
+      // what shows: every child but the screen-reader word, which is clipped to nothing
+      const shown = [...el.childNodes].filter((n) => !(n.nodeType === 1 && n.classList.contains("sr")));
+      const rects = shown.flatMap((n) => {
+        const range = document.createRange();
+        range.selectNode(n);
+        return [...range.getClientRects()];
+      });
+      const rows = new Map();
+      for (const r of rects) {
+        if (r.width <= 1 || r.height <= 1) continue;
+        const key = Math.round(r.top + r.height / 2);
+        const row = [...rows.keys()].find((k) => Math.abs(k - key) < 12) ?? key;
+        const span = rows.get(row) ?? { l: Infinity, r: -Infinity };
+        rows.set(row, { l: Math.min(span.l, r.left), r: Math.max(span.r, r.right) });
+      }
+      const dot = el.querySelector(".mark-dot")?.getBoundingClientRect();
+      const sponsor = [...el.querySelectorAll("a")].at(-1).getBoundingClientRect();
+      return {
+        text,
+        before: before.join("").replace(/\s+/g, " ").trim(),
+        after: after?.textContent,
+        afterHidden: after?.nodeType === 1 ? getComputedStyle(after).position === "absolute" : false,
+        svgHidden: svg?.getAttribute("aria-hidden"),
+        links,
+        gaps: [...rows.values()].map((s) => [s.l - left, right - s.r]),
+        dotRow: dot ? Math.abs(dot.top + dot.height / 2 - (sponsor.top + sponsor.height / 2)) : Infinity,
+      };
+    });
+    expect(read.text).toBe("made with love by roy + ai · sponsor me");
+    expect(read.before).toBe("made with");
+    expect(read.after).toBe("love");
+    expect(read.afterHidden, "the word is for screen readers only").toBe(true);
+    expect(read.svgHidden).toBe("true");
+    expect(read.links).toEqual([
+      ["roy", "https://royashbrook.com"],
+      ["ai", "https://royashbrook.com/agents"],
+      ["sponsor me", "https://github.com/sponsors/royashbrook"],
+    ]);
+    expect(read.gaps.length).toBeGreaterThan(0);
+    for (const [l, r] of read.gaps) expect(Math.abs(l - r), `row gaps ${l} | ${r}`).toBeLessThanOrEqual(2);
+    expect(read.dotRow, "the dot rides with sponsor me").toBeLessThan(4);
+  });

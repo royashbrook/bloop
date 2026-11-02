@@ -318,15 +318,11 @@
         </div>
         {#if updateNote}<p role="status">{updateNote}</p>{/if}
         <p><a class="licences" href="/licenses.md" target="_blank" rel="noopener">licences</a></p>
-        <div class="maker">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21 3 12C-4 4 6-3 12 5 18-3 28 4 21 12Z" /></svg>
-          made with love by
-          <a href="https://royashbrook.com" target="_blank" rel="noopener">roy</a>
-          +
+        <p class="maker">made with <svg aria-hidden="true" class="mark-heart" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" /></svg><span class="sr">love</span> by
+          <a href="https://royashbrook.com" target="_blank" rel="noopener">roy</a> +
           <a href="https://royashbrook.com/agents" target="_blank" rel="noopener">ai</a>
-          ·
-          <a href="https://github.com/sponsors/royashbrook" target="_blank" rel="noopener">sponsor me</a>
-        </div>
+          <span class="mark-tail"><span aria-hidden="true" class="mark-dot">·</span>
+          <a href="https://github.com/sponsors/royashbrook" target="_blank" rel="noopener">sponsor me</a></span></p>
       {:else if sheet === "looks"}
         <h2>looks</h2>
         <ul class="looks">
