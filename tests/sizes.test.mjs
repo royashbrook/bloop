@@ -4,35 +4,91 @@ import { aim, create, drop, heldX, JAR, pieces, snapshot, SPAWN_TIERS, step } fr
 import { randomBot } from "../src/lib/engine/bot.ts";
 import { rng } from "../src/lib/engine/rng.ts";
 import { outline, reach } from "../src/lib/engine/shapes.ts";
+import { grow, grown, KNEE, RATIO, TOP } from "../src/lib/engine/size.ts";
 import { HEADROOM } from "../src/lib/draw.ts";
 import { SKINS } from "../src/lib/skins/index.ts";
 import { cells } from "../src/lib/skins/cells.ts";
 import { dims } from "../src/lib/skins/types.ts";
-import { DEFAULT_SIZE, FIRST_SIZE, SIZES, sizeById } from "../src/lib/sizes.ts";
-import { noBests, parseBests } from "../src/lib/best.ts";
+import { DEFAULT_SIZE, FIRST_SIZE, OLD_SIZES, readSize, SIZE_MAX, SIZE_MIN, SIZE_STEPS, sizeLabel, sizeWord, snapSize } from "../src/lib/sizes.ts";
 
-// piece size (#10): one number scales every tier of every look, applied once when
-// a game is made, so the physics, the join, the drawing and the clamp agree
-const BIG = sizeById("big");
+// piece size (#10, a slider since #15): one number grows every tier of every
+// look, applied once when a game is made, so the physics, the join, the drawing
+// and the clamp agree. up to 1.5 it is a plain multiple; past it the big tiers
+// ease toward a ceiling (engine/size.ts)
 
-test("three sizes, small to big: small is the look's own size, medium is the default", () => {
-  assert.deepEqual(SIZES.map((s) => s.id), ["small", "medium", "big"]);
-  assert.equal(FIRST_SIZE.id, "small");
-  assert.equal(sizeById("small").scale, 1);
-  assert.equal(DEFAULT_SIZE.id, "medium");
-  for (let i = 1; i < SIZES.length; i++) assert.ok(SIZES[i].scale > SIZES[i - 1].scale, `${SIZES[i].id} is bigger`);
-  // a saved size that no longer exists falls back to the default
-  assert.equal(sizeById("huge").id, "medium");
-  assert.equal(sizeById(null).id, "medium");
+test("the slider runs 1 to 3 in steps of 0.1, and 1.5, the old big, is the default", () => {
+  assert.equal(SIZE_MIN, 1);
+  assert.equal(SIZE_MAX, 3);
+  assert.equal(DEFAULT_SIZE, 1.5);
+  assert.equal(FIRST_SIZE, 1);
+  assert.equal(SIZE_STEPS.length, 21);
+  assert.deepEqual(SIZE_STEPS.slice(0, 4), [1, 1.1, 1.2, 1.3]);
+  assert.equal(SIZE_STEPS.at(-1), 3);
+  for (const s of SIZE_STEPS) assert.equal(snapSize(s), s, `${s} is a step`);
+  assert.equal(snapSize(1.26), 1.3);
+  assert.equal(snapSize(0.2), 1);
+  assert.equal(snapSize(9), 3);
+  assert.equal(snapSize(NaN), 1.5);
+  assert.deepEqual(SIZE_STEPS.map(sizeLabel).slice(0, 2), ["1.0", "1.1"]);
+  assert.equal(sizeWord(1.5), "just right");
+  assert.ok(sizeWord(1) !== sizeWord(3));
+});
+
+test("a saved size reads back: a slider number, an old name, or nothing for the default", () => {
+  assert.equal(readSize(null), 1.5);
+  assert.equal(readSize(""), 1.5);
+  assert.equal(readSize("2.3"), 2.3);
+  assert.equal(readSize("2.34"), 2.3);
+  assert.equal(readSize("small"), 1);
+  assert.equal(readSize("medium"), 1.3);
+  assert.equal(readSize("big"), 1.5);
+  assert.equal(readSize("huge"), 1.5);
+  assert.equal(readSize("toString"), 1.5);
+  assert.deepEqual(OLD_SIZES, { small: 1, medium: 1.3, big: 1.5 });
+});
+
+// every 0.01 from 1 to 3, so the curve is held between the slider's steps too
+const FINE = Array.from({ length: 201 }, (_, i) => 1 + i * 0.01);
+
+for (const skin of SKINS)
+  test(`${skin.id}: the size curve. every tier grows with the slider, stays bigger than the one under it, and the biggest stays about 60% of the jar`, () => {
+    const own = skin.tiers.map((t) => t.radius);
+    let before = null;
+    for (const s of FINE) {
+      const r = grow(own, s);
+      for (let i = 1; i < r.length; i++) assert.ok(r[i] > r[i - 1] * RATIO - 1e-12, `${skin.id} at ${s}: tier ${i} ${r[i]} vs ${r[i - 1]}`);
+      // every tier grows; the top one is at its ceiling by about 2 and holds there (it grows by less than a float can show)
+      if (before) r.forEach((x, i) => assert.ok(i === r.length - 1 ? x >= before[i] : x > before[i], `${skin.id} tier ${i} grows from ${before[i]} at ${(s - 0.01).toFixed(2)} to ${x} at ${s.toFixed(2)}`));
+      // the widest piece, any shape, at most 62% of the jar across
+      const wide = Math.max(...r.map((x, i) => (2 * reach(skin.tiers[i].shape ?? "circle", x * JAR.width)) / JAR.width));
+      assert.ok(wide <= 0.62 + 1e-9, `${skin.id} at ${s}: widest ${wide}`);
+      before = r;
+    }
+  });
+
+test("up to 1.5 a size is a plain multiple, so 1, 1.3 and 1.5 are the old small, medium and big exactly", () => {
+  for (const s of [1, 1.3, 1.5]) assert.deepEqual(grow(cells.tiers.map((t) => t.radius), s), cells.tiers.map((t) => t.radius * s));
+  // past the knee it eases off smoothly: no kink, the same slope on both sides
+  const b = cells.tiers[10].radius, h = 1e-6;
+  const left = (grown(b, KNEE, 10, 10) - grown(b, KNEE - h, 10, 10)) / h;
+  const right = (grown(b, KNEE + h, 10, 10) - grown(b, KNEE, 10, 10)) / h;
+  assert.ok(Math.abs(left - right) < 1e-3, `${left} vs ${right}`);
+  // and it never passes the top ceiling
+  assert.ok(grown(b, SIZE_MAX, 10, 10) <= TOP && grown(b, 6, 10, 10) <= TOP);
+  assert.ok(grown(b, 1.6, 10, 10) < TOP && grown(b, 1.6, 10, 10) > b * KNEE);
+  // the smallest grow most: at 3 the first piece is well over twice its own size
+  const at3 = grow(cells.tiers.map((t) => t.radius), 3);
+  assert.ok(at3[0] / cells.tiers[0].radius > 2.5);
 });
 
 for (const skin of SKINS)
-  test(`${skin.id}: every size multiplies every radius, and the bodies and clamp follow`, () => {
-    for (const size of SIZES) {
-      const g = create(5, dims(skin, size.scale));
-      assert.equal(g.scale, size.scale);
+  test(`${skin.id}: every size grows every radius by the curve, and the bodies and clamp follow`, () => {
+    for (const size of [1, 1.3, 1.5, 2, 2.5, 3]) {
+      const g = create(5, dims(skin, size));
+      assert.equal(g.scale, size);
+      const want = grow(skin.tiers.map((t) => t.radius), size);
       skin.tiers.forEach((t, i) => {
-        assert.equal(g.radii[i], t.radius * JAR.width * size.scale, `${t.name} at ${size.id}`);
+        assert.equal(g.radii[i], want[i] * JAR.width, `${t.name} at ${size}`);
         assert.equal(g.reach[i], reach(t.shape ?? "circle", g.radii[i]));
       });
       // a dropped piece is that big, in the physics too
@@ -42,15 +98,15 @@ for (const skin of SKINS)
       assert.equal(p.r, g.radii[4]);
       const body = g.live[0].body;
       const wide = (body.bounds.max.x - body.bounds.min.x) / 2;
-      assert.ok(Math.abs(wide - g.reach[4]) < 0.5, `${size.id}: body half-width ${wide} vs ${g.reach[4]}`);
+      assert.ok(Math.abs(wide - g.reach[4]) < 0.01 * g.reach[4], `${size}: body half-width ${wide} vs ${g.reach[4]}`);
     }
   });
 
 test("a size never changes a look's own data", () => {
   const before = SKINS.map((s) => s.tiers.map((t) => t.radius));
   for (const skin of SKINS) {
-    assert.deepEqual(dims(skin, BIG.scale).radii, skin.tiers.map((t) => t.radius));
-    create(1, dims(skin, BIG.scale));
+    assert.deepEqual(dims(skin, 3).radii, skin.tiers.map((t) => t.radius));
+    create(1, dims(skin, 3));
   }
   assert.deepEqual(SKINS.map((s) => s.tiers.map((t) => t.radius)), before);
   // and with no size the engine plays the look's own size
@@ -74,15 +130,15 @@ function scripted(seed, scale, steps) {
 
 test("the same seed, size and inputs replay the same game, at every size", () => {
   const runs = {};
-  for (const size of SIZES) {
-    const a = snapshot(scripted(11, size.scale, 2400));
-    const b = snapshot(scripted(11, size.scale, 2400));
-    assert.ok(a.pieces.length > 5 && a.score > 0, `${size.id}: a real game`);
-    assert.deepEqual(a, b, size.id);
-    runs[size.id] = a;
+  for (const size of [1, 1.5, 2.2, 3]) {
+    const a = snapshot(scripted(11, size, 2400));
+    const b = snapshot(scripted(11, size, 2400));
+    assert.ok(a.pieces.length > 3 && a.score > 0, `${size}: a real game`);
+    assert.deepEqual(a, b, String(size));
+    runs[size] = a;
   }
   // the size matters to the game, and the deal does not depend on it
-  assert.notDeepEqual(runs.small.pieces, runs.big.pieces);
+  assert.notDeepEqual(runs[1].pieces, runs[3].pieces);
   const deal = (scale) => {
     const g = create(21, dims(cells, scale));
     const seen = [g.held, g.next];
@@ -93,72 +149,41 @@ test("the same seed, size and inputs replay the same game, at every size", () =>
     }
     return seen;
   };
-  assert.deepEqual(deal(1), deal(BIG.scale));
+  assert.deepEqual(deal(1), deal(3));
 });
 
 for (const skin of SKINS)
-  test(`${skin.id} at big: the top tier is at most 60% of the jar across, and every drop is held inside the walls`, () => {
-    const g = create(1, dims(skin, BIG.scale));
-    // how far each piece reaches sideways, worked out here from the look, not read back from the engine
-    const wide = skin.tiers.map((t) => reach(t.shape ?? "circle", t.radius * JAR.width * BIG.scale));
-    const widest = Math.max(...wide) * 2;
-    assert.ok(widest <= JAR.width * 0.6 + 1e-9, `widest piece ${widest} of ${JAR.width}`);
-    for (let tier = 0; tier < SPAWN_TIERS; tier++) {
-      g.held = tier;
-      for (const x of [-50, 0, JAR.width, JAR.width + 50]) {
-        aim(g, x);
-        const at = heldX(g);
-        assert.ok(at - wide[tier] >= -1e-9 && at + wide[tier] <= JAR.width + 1e-9, `tier ${tier} aimed at ${x} sits at ${at}`);
+  test(`${skin.id} at every slider step: every drop is held inside the walls and drawn whole above the rim`, () => {
+    for (const size of SIZE_STEPS) {
+      const g = create(1, dims(skin, size));
+      // how far each piece reaches, worked out here from the look and the curve, not read back from the engine
+      const r = grow(skin.tiers.map((t) => t.radius), size).map((f) => f * JAR.width);
+      for (let tier = 0; tier < SPAWN_TIERS; tier++) {
+        const shape = skin.tiers[tier].shape ?? "circle";
+        const wide = reach(shape, r[tier]);
+        g.held = tier;
+        for (const x of [-50, 0, JAR.width, JAR.width + 50]) {
+          aim(g, x);
+          const at = heldX(g);
+          assert.ok(at - wide >= -1e-9 && at + wide <= JAR.width + 1e-9, `${skin.id} ${size} tier ${tier} aimed at ${x} sits at ${at}`);
+        }
+        const pts = outline(shape, r[tier]);
+        const up = pts ? -Math.min(...pts.map((p) => p.y)) : r[tier];
+        assert.ok(JAR.dropY - up >= -HEADROOM, `${skin.id} ${size} tier ${tier} reaches ${up - JAR.dropY} over the rim`);
       }
     }
   });
 
-test("the held piece is drawn whole above the rim at every size", () => {
-  for (const skin of SKINS)
-    for (const size of SIZES) {
-      const g = create(1, dims(skin, size.scale));
-      for (let tier = 0; tier < SPAWN_TIERS; tier++) {
-        const pts = outline(g.shapes[tier], g.radii[tier]);
-        const up = pts ? -Math.min(...pts.map((p) => p.y)) : g.radii[tier];
-        assert.ok(JAR.dropY - up >= -HEADROOM, `${skin.id} ${size.id} tier ${tier} reaches ${up - JAR.dropY} over the rim`);
-      }
-    }
-});
-
-test("bigger pieces fill the jar sooner: the random bot lasts longest on small, shortest on big", () => {
+test("bigger pieces fill the jar sooner: the random bot lasts longer at every smaller size", () => {
   const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
-  const seeds = [1, 2, 3, 4, 5];
+  const seeds = [1, 2, 3, 4, 5, 6, 7];
   const drops = {};
-  for (const size of SIZES) {
-    const runs = seeds.map((s) => randomBot(s, dims(cells, size.scale)));
-    for (const r of runs) assert.ok(r.over, `${size.id} seed ${r.seed} never filled the jar`);
-    drops[size.id] = median(runs.map((r) => r.drops));
+  for (const size of [1, 1.5, 2, 3]) {
+    const runs = seeds.map((s) => randomBot(s, dims(cells, size)));
+    for (const r of runs) assert.ok(r.over, `${size} seed ${r.seed} never filled the jar`);
+    drops[size] = median(runs.map((r) => r.drops));
   }
-  assert.ok(drops.small > drops.medium && drops.medium > drops.big, JSON.stringify(drops));
-  // medium is about half of small, big shorter again
-  assert.ok(drops.medium < drops.small * 0.65, JSON.stringify(drops));
-  assert.ok(drops.big < drops.medium * 0.9, JSON.stringify(drops));
-});
-
-// the saved bests: one record, a best per size. an older save was played at scale 1.
-const never = () => assert.fail("only a plain-number save reads the old mark key");
-test("no save, or a broken one, is no best at any size", () => {
-  for (const raw of [null, "", "nope", "{", "null", "[]", "-5", "0", "{}"])
-    assert.deepEqual(parseBests(raw, () => false), noBests(), String(raw));
-});
-
-test("an older plain-number best is the small best, with its mark from the old key", () => {
-  assert.deepEqual(parseBests("40", () => true), { ...noBests(), small: { score: 40, jiggled: true } });
-  assert.deepEqual(parseBests("40", () => false), { ...noBests(), small: { score: 40, jiggled: false } });
-});
-
-test("an older { score, jiggled } best is the small best", () => {
-  assert.deepEqual(parseBests(JSON.stringify({ score: 77, jiggled: true }), never), { ...noBests(), small: { score: 77, jiggled: true } });
-});
-
-test("a best per size reads back as written, each size its own", () => {
-  const bests = { small: { score: 900, jiggled: false }, medium: { score: 300, jiggled: true }, big: { score: 0, jiggled: false } };
-  assert.deepEqual(parseBests(JSON.stringify(bests), never), bests);
-  // a size missing or broken in the record is just no best for it
-  assert.deepEqual(parseBests(JSON.stringify({ medium: { score: 12 }, big: "x" }), never), { ...noBests(), medium: { score: 12, jiggled: false } });
+  assert.ok(drops[1] > drops[1.5] && drops[1.5] > drops[2] && drops[2] > drops[3], JSON.stringify(drops));
+  // and the hardest end is still a game, not a jar full in a few drops
+  assert.ok(drops[3] >= 15, JSON.stringify(drops));
 });

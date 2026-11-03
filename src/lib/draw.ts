@@ -8,9 +8,9 @@ import { CALM, type FaceState, type Skin } from "./skins/types.ts";
 export const MARGIN = 10;
 /**
  * room above the rim, in world units, so the biggest piece the biggest size can
- * drop is drawn whole while it waits (it reaches about 8 units over the rim)
+ * drop is drawn whole while it waits (at size 3 it reaches about 32 units over the rim)
  */
-export const HEADROOM = 10;
+export const HEADROOM = 34;
 export const VIEW = { width: JAR.width + MARGIN * 2, height: HEADROOM + JAR.height + MARGIN };
 
 export interface Theme {

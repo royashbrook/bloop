@@ -3,6 +3,7 @@
 import Matter from "matter-js";
 import { rng } from "./rng.ts";
 import { outline, reach, type Shape } from "./shapes.ts";
+import { grow } from "./size.ts";
 
 const { Engine, Bodies, Body, Composite } = Matter;
 
@@ -23,12 +24,20 @@ export const SPAWN_TIERS = 5;
 export const COOLDOWN = 30;
 /** a fresh drop is still falling through for this many steps; it cannot end a game yet */
 export const GRACE = 60;
-/** a settled piece above the line this many steps in a row ends the game */
-export const OVER_AFTER = 120;
+/**
+ * a settled piece above the line this long in a row ends the game: two real
+ * seconds at every speed (120 steps at speed 1, 240 at speed 2), so a kid always
+ * gets the same time to see the warning and fix it
+ */
+export const OVER_SECONDS = 2;
+/** steps above the line that end a game at speed 1 */
+export const OVER_AFTER = Math.round(OVER_SECONDS * 60);
 /** merges resolved per step; the rest wait one step (they are still touching) */
 export const MAX_MERGES = 6;
-/** at most this many steps per advance() call: a long stall drops time, not frames */
+/** at most this many steps per advance() call at speed 1: a long stall drops time, not frames */
 const MAX_CATCHUP = 8;
+/** a step is due when the clock is this close to it: 1.25 x 1/60 summed in floats falls a hair short */
+const DUE = 1e-9;
 const WALL = 200;
 /**
  * two of a kind join once their outlines are this close, in world units: about
@@ -51,9 +60,10 @@ export interface Dims {
   radii: readonly number[];
   shapes?: readonly Shape[];
   /**
-   * how big every piece is, times the skin's own size (1 when left out). it is
-   * applied once, here, so the physics, the join distance, the drawing and the
-   * wall clamp all read the same radii. bigger pieces fill the jar sooner.
+   * the piece size (1 when left out): up to 1.5 every piece is the skin's own
+   * size times this, past it the big tiers ease toward a ceiling (see size.ts).
+   * it is applied once, here, so the physics, the join distance, the drawing and
+   * the wall clamp all read the same radii. bigger pieces fill the jar sooner.
    */
   scale?: number;
 }
@@ -100,8 +110,17 @@ interface Live {
 
 export interface Game {
   readonly seed: number;
-  /** every radius was the skin's size times this */
+  /** the piece size every radius was grown to (see size.ts) */
   readonly scale: number;
+  /**
+   * how fast the world runs: this many times 60 fixed steps a real second. the
+   * step itself never changes, so a game is the same steps at any speed, only
+   * sooner; the speed is part of the game for the full-jar timer, which counts
+   * real seconds.
+   */
+  readonly speed: number;
+  /** steps above the line that end this game: OVER_SECONDS at this speed */
+  readonly overAfter: number;
   readonly radii: number[];
   readonly shapes: Shape[];
   /** how far each tier reaches sideways from its centre, upright */
@@ -143,7 +162,8 @@ export interface Game {
 }
 
 
-export function create(seed: number, dims: Dims): Game {
+/** speed: 1 is 60 steps a real second (see Game.speed) */
+export function create(seed: number, dims: Dims, speed = 1): Game {
   if (dims.radii.length < SPAWN_TIERS + 1) throw Error("a skin needs more tiers than the spawn range");
   const engine = Engine.create({
     gravity: { x: 0, y: 1, scale: 0.001 },
@@ -164,11 +184,14 @@ export function create(seed: number, dims: Dims): Game {
   const held = pick();
   const scale = dims.scale ?? 1;
   if (!(Number.isFinite(scale) && scale > 0)) throw Error("a piece scale must be a positive number");
-  const radii = dims.radii.map((f) => f * W * scale);
+  if (!(Number.isFinite(speed) && speed > 0)) throw Error("a speed must be a positive number");
+  const radii = grow(dims.radii, scale).map((f) => f * W);
   const shapes = dims.radii.map((_, i) => dims.shapes?.[i] ?? "circle");
   const g: Game = {
     seed,
     scale,
+    speed,
+    overAfter: Math.round(OVER_AFTER * speed),
     radii,
     shapes,
     reach: radii.map((r, i) => reach(shapes[i], r)),
@@ -398,25 +421,27 @@ export function step(g: Game) {
     if (p.age > GRACE && top(p) < JAR.line) high = true;
   }
   g.above = high ? g.above + 1 : 0;
-  g.danger = Math.min(1, g.above / OVER_AFTER);
-  if (g.above >= OVER_AFTER) g.over = true;
+  g.danger = Math.min(1, g.above / g.overAfter);
+  if (g.above >= g.overAfter) g.over = true;
 }
 
 /**
  * real time in, whole steps out: the accumulator keeps the world on 1/60 s
- * slices at any frame rate. returns the merges made during this call.
+ * slices at any frame rate, and runs speed times as many of them a second.
+ * returns the merges made during this call.
  */
 export function advance(g: Game, seconds: number): Merge[] {
   const made: Merge[] = [];
-  g.acc += Math.min(Math.max(seconds, 0), 0.25);
+  g.acc += Math.min(Math.max(seconds, 0), 0.25) * g.speed;
+  const most = Math.ceil(MAX_CATCHUP * g.speed);
   let n = 0;
-  while (g.acc >= STEP && n < MAX_CATCHUP) {
+  while (g.acc >= STEP - DUE && n < most) {
     step(g);
     made.push(...g.merges);
     g.acc -= STEP;
     n++;
   }
-  if (g.acc >= STEP) g.acc = 0;
+  if (g.acc >= STEP - DUE) g.acc = 0;
   return made;
 }
 
@@ -425,6 +450,7 @@ export function snapshot(g: Game) {
   return {
     seed: g.seed,
     scale: g.scale,
+    speed: g.speed,
     steps: g.steps,
     score: g.score,
     held: g.held,
