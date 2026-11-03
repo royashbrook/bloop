@@ -11,6 +11,7 @@
   import { parseBests, type Bests } from "./lib/best.ts";
   import { installControl } from "./install.ts";
   import { updateControl, type UpdateCheck } from "./pwa.ts";
+  import { createSound } from "./lib/sound.ts";
 
   const ETHOS =
     "no ads, no lives, no timers, nothing to buy, no accounts, no cookies, nothing sold or shared.";
@@ -50,6 +51,16 @@
   let jiggleOn = $state(jiggleSaved);
   let jiggleNote = $state("");
   let jiggled = $state(jiggleSaved);
+  // sound: on unless someone turned it off. it starts on the first tap or key
+  const SOUND = "bloop:sound";
+  const soundSaved = readSlot(SOUND) !== "off";
+  let soundOn = $state(soundSaved);
+  const sfx = createSound(soundSaved);
+  function toggleSound() {
+    soundOn = !soundOn;
+    writeSlot(SOUND, soundOn ? "on" : "off");
+    sfx.setSound(soundOn);
+  }
 
   let game: Game = create(freshSeed(), dims(firstSkin, firstSize.scale));
   // the sizes this game was made with, for the preview
@@ -78,6 +89,7 @@
     look: () => ({ now: skin.id, next: pending?.id ?? null }),
     size: () => ({ now: size.id, next: pendingSize?.id ?? null }),
     faces: () => faces.report(game),
+    sound: () => sfx.report(),
   };
 
   function sync() {
@@ -201,7 +213,9 @@
     const dt = last ? (now - last) / 1000 : 0;
     last = now;
     if (!game.over && !sheet && !document.hidden) {
-      for (const m of advance(game, dt)) celebrate(m, now);
+      const made = advance(game, dt);
+      for (const m of made) celebrate(m, now);
+      sfx.merges(made.map((m) => ({ ...m, big: m.tier >= SPAWN_TIERS })));
       sync();
     }
     bursts = bursts.filter((b) => now - b.at < BURST_LIFE);
@@ -213,7 +227,17 @@
   const visibility = () => {
     last = 0;
     visible = !document.hidden;
+    if (document.hidden) sfx.quiet();
+    else sfx.resume();
   };
+  // a departing page goes quiet at that moment; a page back from the cache picks up
+  const pagehide = () => sfx.quiet();
+  const pageshow = () => sfx.resume();
+  /** drop the held piece, with a plop */
+  function dropHeld() {
+    const tier = game.held;
+    if (drop(game)) sfx.drop(tier);
+  }
 
   // turning jiggle on is the tap iOS needs to ask for motion; no answer, no jiggle
   async function toggleJiggle() {
@@ -267,13 +291,14 @@
     pointer = null;
     if (!playable()) return;
     aimAt(e.clientX);
-    drop(game);
+    dropHeld();
   }
   function cancel(e: PointerEvent) {
     if (e.pointerId === pointer) pointer = null;
   }
 
   function key(e: KeyboardEvent) {
+    sfx.wake();
     if (sheet || game.over) return;
     // space and enter belong to a focused button; the button does its own job
     if ((e.key === " " || e.key === "Enter") && (e.target as Element | null)?.closest?.("button, a, input, select, textarea")) return;
@@ -282,7 +307,7 @@
       aim(game, heldX(game) + (e.key === "ArrowLeft" ? -1 : 1) * JAR.width * 0.04);
     } else if (e.key === " " || e.key === "Enter") {
       e.preventDefault();
-      drop(game);
+      dropHeld();
     }
   }
 
@@ -314,6 +339,8 @@
     updates = updateControl(() => (updateReady = true));
     addEventListener("keydown", key);
     document.addEventListener("visibilitychange", visibility);
+    addEventListener("pagehide", pagehide);
+    addEventListener("pageshow", pageshow);
     still = matchMedia("(prefers-reduced-motion: reduce)");
     dark = matchMedia("(prefers-color-scheme: dark)");
     dark.addEventListener("change", repaint);
@@ -333,11 +360,13 @@
     if (typeof removeEventListener === "function") {
       removeEventListener("keydown", key);
       document.removeEventListener("visibilitychange", visibility);
+      removeEventListener("pagehide", pagehide);
+      removeEventListener("pageshow", pageshow);
     }
   });
 </script>
 
-<main class="play">
+<main class="play" onpointerdowncapture={sfx.wake} onpointerupcapture={sfx.wake}>
   <header class="hud">
     <button id="about" class="icon" aria-label="about bloop" onclick={() => (sheet = "about")}>☰</button>
     <div class="stat" id="score"><span>score</span><b>{score}</b></div>
@@ -393,6 +422,7 @@
         <p>keep the jar under the dashed line. if something sits above it too long, the jar is full.</p>
         <button id="looks" onclick={() => (sheet = "looks")}>looks: {skin.name}{pending ? ` (next game: ${pending.name})` : ""}</button>
         <button id="size" onclick={() => (sheet = "size")}>pieces: {size.id}{pendingSize ? ` (next game: ${pendingSize.id})` : ""}</button>
+        <button id="sound" role="switch" aria-checked={soundOn} onclick={toggleSound}>sound: {soundOn ? "on" : "off"}</button>
         <button id="jiggle" role="switch" aria-checked={jiggleOn} onclick={toggleJiggle}>jiggle: {jiggleOn ? "on" : "off"}</button>
         <p class="hint">shake your phone to jiggle the jar. a score made with jiggle on gets a little mark.</p>
         {#if jiggleNote}<p class="jiggle-note" role="status">{jiggleNote}</p>{/if}
