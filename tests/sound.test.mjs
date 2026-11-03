@@ -79,7 +79,7 @@ test("a new biggest and two of the biggest gone get a sparkle; a plain merge and
 function fake() {
   const log = { starts: [], clock: 0 };
   const param = () => ({ value: 0, setValueAtTime(v) { this.value = v; }, exponentialRampToValueAtTime() {} });
-  const node = (extra) => ({ connect: (n) => n, ...extra });
+  const node = (extra) => { const n = { connect: (x) => x, disconnect() { n.cut = true; }, ...extra }; return n; };
   globalThis.document = { hidden: false };
   globalThis.AudioContext = class {
     state = "running";
@@ -148,3 +148,33 @@ test("muted, nothing plays and no audio is made", async () => {
   assert.equal(made, 0);
   assert.equal(s.report().played, 0);
 });
+
+// a review catch: mute or hide while the audio is still waking up (resume not done yet).
+// the late resume must not let the queued plop play, and the audio must end up paused.
+for (const how of ["mute", "hide"])
+  test(`${how} while audio is still waking: the late resume stays silent`, async () => {
+    const { createSound } = await import("../src/lib/sound.ts");
+    fake();
+    let made, finish;
+    const gains = [];
+    const Base = globalThis.AudioContext;
+    globalThis.AudioContext = class extends Base {
+      state = "suspended";
+      constructor() { super(); made = this; }
+      createGain() { const g = super.createGain(); gains.push(g); return g; }
+      resume() { return new Promise((done) => (finish = () => { this.state = "running"; this.onstatechange?.(); done(); })); }
+      suspend() { this.state = "suspended"; return Promise.resolve(); }
+    };
+    const s = createSound(true);
+    s.wake();
+    s.drop(2);
+    assert.equal(s.report().played, 1, "the plop was queued while waking");
+    if (how === "mute") s.setSound(false);
+    else s.quiet();
+    finish();
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(made.state, "suspended", "the late resume is paused again");
+    assert.ok(gains[0].cut, "the output with the queued plop is cut");
+    s.drop(2);
+    assert.equal(s.report().played, 1, "nothing new plays");
+  });

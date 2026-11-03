@@ -160,6 +160,27 @@ export function createSound(on: boolean) {
   let played = 0;
   /** a resume asked for inside a tap, not yet done: a sound now plays as it finishes */
   let waking = false;
+  /** the page asked for quiet (hidden or leaving); pagehide can come before document.hidden */
+  let hushed = false;
+
+  // what the player wants right now. every path checks this, including a resume that
+  // finishes late: muting or hiding while audio is still waking must never let it play.
+  const wanted = () => sound && !hushed && !document.hidden;
+
+  /** unwanted: cut the output at once (queued sounds go with it) and pause the audio */
+  function hush() {
+    if (!ctx) return;
+    if (out) {
+      out.disconnect();
+      out = null;
+      ends = [];
+    }
+    if (ctx.state !== "closed") void ctx.suspend();
+  }
+  /** the audio changed state on its own (a late resume): make it match what is wanted */
+  function reconcile() {
+    if (ctx && !wanted()) hush();
+  }
 
   // audio may only start inside a tap or a key press; wake() runs in one
   function wake() {
@@ -167,7 +188,7 @@ export function createSound(on: boolean) {
     if (!ctx) {
       try {
         ctx = new AudioContext();
-        out = master(ctx);
+        ctx.onstatechange = reconcile;
         noise = hiss(ctx);
       } catch {
         // no web audio here: the game plays on in silence
@@ -175,13 +196,15 @@ export function createSound(on: boolean) {
         return;
       }
     }
-    if (ctx.state === "suspended" && !document.hidden && !waking) {
+    if (!wanted()) return;
+    if (!out) out = master(ctx);
+    if (ctx.state === "suspended" && !waking) {
       waking = true;
-      ctx.resume().finally(() => (waking = false));
+      ctx.resume().then(reconcile, () => {}).finally(() => (waking = false));
     }
   }
 
-  const ready = () => sound && ctx && out && (ctx.state === "running" || waking);
+  const ready = () => wanted() && ctx && out && (ctx.state === "running" || waking);
 
   /** take a voice, or say no: at most MAX_VOICES at once */
   function voice(at: number, length: number) {
@@ -225,15 +248,19 @@ export function createSound(on: boolean) {
     setSound(v: boolean) {
       sound = v;
       if (v) wake();
-      else if (ctx?.state === "running") void ctx.suspend();
+      else hush();
     },
     /** a hidden or departing page goes quiet at once */
     quiet() {
-      if (ctx?.state === "running") void ctx.suspend();
+      hushed = true;
+      hush();
     },
     /** back in view: pick up again, if sound is on and it ever started */
     resume() {
-      if (sound && ctx?.state === "suspended" && !document.hidden) void ctx.resume();
+      hushed = false;
+      if (!ctx || !wanted()) return;
+      if (!out) out = master(ctx);
+      if (ctx.state === "suspended") ctx.resume().then(reconcile, () => {});
     },
     /** a plain copy for the test window */
     report: () => ({ on: sound, state: ctx?.state ?? "none", played, voices: ctx ? ends.filter((e) => e > ctx!.currentTime).length : 0 }),
