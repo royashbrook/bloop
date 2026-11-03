@@ -173,6 +173,8 @@
     const dpr = Math.min(3, window.devicePixelRatio || 1);
     jarEl.style.width = `${w}px`;
     jarEl.style.height = `${h}px`;
+    // the jar sits centred in the space; the warning hangs from its rim, not the space's top
+    surfaceEl.style.setProperty("--jar-top", `${Math.max(0, (box.height - h) / 2)}px`);
     jarEl.width = Math.round(w * dpr);
     jarEl.height = Math.round(h * dpr);
     scale = jarEl.width / VIEW.width;
