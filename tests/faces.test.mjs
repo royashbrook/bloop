@@ -212,9 +212,10 @@ test("a piece that comes to rest against another, or is set down touching, makes
 });
 
 test("a piece that moved gets comfy once it comes to rest, and not before", () => {
-  const { g, f, faller } = fall(120);
+  // set down from a little way up: it moves, but lands too softly for a bump
+  const { g, f, faller } = fall(8);
   const me = g.live.find((p) => p.id === faller);
-  let movedLast = -1, comfyFirst = -1, still = 0;
+  let movedLast = -1, comfyFirst = -1, still = 0, done = false;
   for (let t = FRAME; t < 4000; t += FRAME) {
     step(g);
     f.update(g, t, false);
@@ -222,8 +223,11 @@ test("a piece that moved gets comfy once it comes to rest, and not before", () =
     if (speed > 0.15 && comfyFirst < 0) movedLast = t;
     const mood = byId(f.report(g), faller).mood;
     if (mood === "comfy" && comfyFirst < 0) comfyFirst = t;
-    if (mood === "comfy") still++;
+    // the first stretch of comfy (a snuggle may come later, on its own)
+    if (mood === "comfy" && !done) still++;
+    else if (comfyFirst > 0) done = true;
   }
+  assert.equal(f.report(g).counts.bump, 0);
   assert.ok(comfyFirst > 0, "it got comfy");
   // only once it had been still for a beat
   assert.ok(movedLast > 0 && comfyFirst - movedLast >= SETTLE_MS - FRAME, `comfy at ${comfyFirst}, last moved ${movedLast}`);
@@ -321,4 +325,20 @@ test("reduced motion: no glance, no hello, no look around; a bump and comfy stil
   }
   assert.ok(moods.get(hard.floor).has("oof"));
   assert.ok(moods.get(hard.faller).has("comfy"));
+});
+
+test("a moment never moves a blink: close neighbours blink just as far-apart ones do", () => {
+  const blinks = ({ g }) => {
+    const f = faces();
+    const out = [];
+    for (let t = 0; t < 20000; t += FRAME) {
+      f.update(g, t, false);
+      out.push(f.report(g).list.map((p) => p.blink).join());
+    }
+    return { out, counts: f.report(g).counts };
+  };
+  const near = blinks(neighbours()), far = blinks(pair());
+  const { glance, around, snuggle } = near.counts;
+  assert.ok(glance > 0 && glance + around + snuggle > 5, JSON.stringify(near.counts));
+  assert.deepEqual(near.out, far.out);
 });
