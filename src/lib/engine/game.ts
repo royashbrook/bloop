@@ -3,7 +3,7 @@
 import Matter from "matter-js";
 import { rng } from "./rng.ts";
 import { outline, reach, type Shape } from "./shapes.ts";
-import { grow } from "./size.ts";
+import { grow, KNEE } from "./size.ts";
 
 const { Engine, Bodies, Body, Composite } = Matter;
 
@@ -185,7 +185,9 @@ export function create(seed: number, dims: Dims, speed = 1): Game {
   const scale = dims.scale ?? 1;
   if (!(Number.isFinite(scale) && scale > 0)) throw Error("a piece scale must be a positive number");
   if (!(Number.isFinite(speed) && speed > 0)) throw Error("a speed must be a positive number");
-  const radii = grow(dims.radii, scale).map((f) => f * W);
+  // up to the knee, multiply in the old order (f * W * s): one rounding off and a seeded
+  // game at 1, 1.3 or 1.5 would play out differently from the same game before sliders
+  const radii = scale <= KNEE ? dims.radii.map((f) => f * W * scale) : grow(dims.radii, scale).map((f) => f * W);
   const shapes = dims.radii.map((_, i) => dims.shapes?.[i] ?? "circle");
   const g: Game = {
     seed,

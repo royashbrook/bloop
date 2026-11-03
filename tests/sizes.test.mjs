@@ -88,7 +88,9 @@ for (const skin of SKINS)
       assert.equal(g.scale, size);
       const want = grow(skin.tiers.map((t) => t.radius), size);
       skin.tiers.forEach((t, i) => {
-        assert.equal(g.radii[i], want[i] * JAR.width, `${t.name} at ${size}`);
+        // up to 1.5 in the old order (radius * width * size), so old seeded games replay exactly
+        const exact = size <= 1.5 ? t.radius * JAR.width * size : want[i] * JAR.width;
+        assert.equal(g.radii[i], exact, `${t.name} at ${size}`);
         assert.equal(g.reach[i], reach(t.shape ?? "circle", g.radii[i]));
       });
       // a dropped piece is that big, in the physics too

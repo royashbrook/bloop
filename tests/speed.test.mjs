@@ -164,3 +164,16 @@ test("a fresh drop's grace is the time it takes to fall, the same steps at every
       assert.ok(pieces(g)[0].y > JAR.height / 2, "it reached the bottom");
     }
 });
+
+// a review catch: up to the knee the radii must be computed in the old order (f * W * s),
+// or ulp differences change seeded games that used to play at small, medium and big
+test("at 1, 1.3 and 1.5 every radius is bit-for-bit the old one", async () => {
+  const { create, JAR } = await import("../src/lib/engine/game.ts");
+  const { dims } = await import("../src/lib/skins/types.ts");
+  const { cells } = await import("../src/lib/skins/cells.ts");
+  const base = dims(cells);
+  for (const s of [1, 1.3, 1.5]) {
+    const g = create(1, { ...base, scale: s });
+    assert.deepEqual(g.radii, base.radii.map((f) => f * JAR.width * s), `scale ${s}`);
+  }
+});
