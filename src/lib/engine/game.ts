@@ -50,6 +50,12 @@ export const scoreFor = (k: number) => (k * (k + 1)) / 2;
 export interface Dims {
   radii: readonly number[];
   shapes?: readonly Shape[];
+  /**
+   * how big every piece is, times the skin's own size (1 when left out). it is
+   * applied once, here, so the physics, the join distance, the drawing and the
+   * wall clamp all read the same radii. bigger pieces fill the jar sooner.
+   */
+  scale?: number;
 }
 
 export interface Piece {
@@ -94,6 +100,8 @@ interface Live {
 
 export interface Game {
   readonly seed: number;
+  /** every radius was the skin's size times this */
+  readonly scale: number;
   readonly radii: number[];
   readonly shapes: Shape[];
   /** how far each tier reaches sideways from its centre, upright */
@@ -154,10 +162,13 @@ export function create(seed: number, dims: Dims): Game {
   const random = rng(seed);
   const pick = () => Math.floor(random() * SPAWN_TIERS);
   const held = pick();
-  const radii = dims.radii.map((f) => f * W);
+  const scale = dims.scale ?? 1;
+  if (!(Number.isFinite(scale) && scale > 0)) throw Error("a piece scale must be a positive number");
+  const radii = dims.radii.map((f) => f * W * scale);
   const shapes = dims.radii.map((_, i) => dims.shapes?.[i] ?? "circle");
   const g: Game = {
     seed,
+    scale,
     radii,
     shapes,
     reach: radii.map((r, i) => reach(shapes[i], r)),
@@ -413,6 +424,7 @@ export function advance(g: Game, seconds: number): Merge[] {
 export function snapshot(g: Game) {
   return {
     seed: g.seed,
+    scale: g.scale,
     steps: g.steps,
     score: g.score,
     held: g.held,

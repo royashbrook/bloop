@@ -344,6 +344,24 @@ a {
 .look-note {
   color: var(--ink-dim);
 }
+/* the piece sizes: same buttons as the looks, a line on how hard each is */
+.size-hint {
+  grid-column: 1 / -1;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-dim);
+}
+.look-pieces .size-piece {
+  width: 40px;
+  height: 40px;
+}
+/* the size a best was made at, small, next to the word best */
+.best-size {
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--surface-sunk);
+  font-weight: 700;
+}
 /* jiggle: a small phone-shake mark next to a score made with it on */
 .shake-mark {
   width: 0.7em;

@@ -7,6 +7,8 @@
   import { SKINS, skinById } from "./lib/skins/index.ts";
   import { dims, type Skin } from "./lib/skins/types.ts";
   import { readSlot, writeSlot } from "./lib/storage.ts";
+  import { SIZES, sizeById, type Size } from "./lib/sizes.ts";
+  import { parseBests, type Bests } from "./lib/best.ts";
   import { installControl } from "./install.ts";
   import { updateControl, type UpdateCheck } from "./pwa.ts";
 
@@ -21,35 +23,25 @@
   let pending = $state.raw<Skin | null>(null);
   const tiers = $derived(skin.tiers);
   const faces = makeFaces();
+  // the piece size: one number for every look. like a look, a change mid-game
+  // waits for the next game, and the pick is saved.
+  const SIZE = "bloop:size";
+  const firstSize = sizeById(readSlot(SIZE));
+  let size = $state.raw<Size>(firstSize);
+  let pendingSize = $state.raw<Size | null>(null);
 
   // ?seed=123 plays that exact deal every game, so a run can be shared and replayed
   const q = new URLSearchParams(location.search);
   const fixedSeed = /^\d{1,9}$/.test(q.get("seed") ?? "") ? Number(q.get("seed")) : null;
-  // { score, jiggled } from the one record. a plain number is the older save (v0, and
-  // v1 before this), whose mark lived in its own key.
-  function readBest(): { score: number; jiggled: boolean } {
-    const raw = readSlot("bloop:best");
-    const none = { score: 0, jiggled: false };
-    if (raw === null) return none;
-    const legacy = Number(raw);
-    if (raw.trim() !== "" && Number.isSafeInteger(legacy))
-      return legacy > 0 ? { score: legacy, jiggled: readSlot("bloop:best-jiggled") === "1" } : none;
-    try {
-      const v = JSON.parse(raw);
-      const n = Number(v?.score);
-      return Number.isSafeInteger(n) && n > 0 ? { score: n, jiggled: v.jiggled === true } : none;
-    } catch {
-      return none;
-    }
-  }
-
   const freshSeed = () => fixedSeed ?? crypto.getRandomValues(new Uint32Array(1))[0];
 
-  // the best score and whether jiggle was on for it are one record, written in one
-  // go, so a failed write can never keep the score and lose its mark
+  // a best per piece size, each with whether jiggle was on for it, all one record
+  // written in one go, so a failed write can never keep a score and lose its mark.
+  // an older save (a plain number, or one { score, jiggled }) was played at scale 1.
   const BEST = "bloop:best";
-  const firstBest = readBest();
-  let best = $state(firstBest.score);
+  let bests = $state.raw<Bests>(parseBests(readSlot(BEST), () => readSlot("bloop:best-jiggled") === "1"));
+  const best = $derived(bests[size.id].score);
+  const bestJiggled = $derived(bests[size.id].jiggled);
   let saved = $state(true);
   // jiggle: off by default, a fun extra. a run played with it on is marked, and
   // so is a best made in one, so everyone can see it was jiggled.
@@ -57,10 +49,11 @@
   const jiggleSaved = readSlot(JIGGLE) === "1";
   let jiggleOn = $state(jiggleSaved);
   let jiggleNote = $state("");
-  let bestJiggled = $state(firstBest.jiggled);
   let jiggled = $state(jiggleSaved);
 
-  let game: Game = create(freshSeed(), dims(firstSkin));
+  let game: Game = create(freshSeed(), dims(firstSkin, firstSize.scale));
+  // the sizes this game was made with, for the preview
+  let radii = $state.raw(game.radii);
   if (jiggleSaved) markJiggle(game);
   // the game mutates in place; these are what the screen watches
   let score = $state(0);
@@ -69,7 +62,7 @@
   let next = $state(game.next);
   let flair = $state("");
   let flairKey = $state(0);
-  let sheet = $state<"" | "about" | "ios" | "restart" | "looks">("");
+  let sheet = $state<"" | "about" | "ios" | "restart" | "looks" | "size">("");
 
   let jarEl = $state<HTMLCanvasElement>();
   let nextEl = $state<HTMLCanvasElement>();
@@ -83,6 +76,7 @@
   (window as unknown as { __bloop: unknown }).__bloop = {
     state: () => snapshot(game),
     look: () => ({ now: skin.id, next: pending?.id ?? null }),
+    size: () => ({ now: size.id, next: pendingSize?.id ?? null }),
     faces: () => faces.report(game),
   };
 
@@ -90,9 +84,9 @@
     if (score !== game.score) {
       score = game.score;
       if (score > best) {
-        best = score;
-        bestJiggled = game.jiggled;
-        saved = writeSlot(BEST, JSON.stringify({ score: best, jiggled: bestJiggled }));
+        // this game was made at the size on screen: sizes change only between games
+        bests = { ...bests, [size.id]: { score, jiggled: game.jiggled } };
+        saved = writeSlot(BEST, JSON.stringify(bests));
       }
     }
     jiggled = game.jiggled;
@@ -129,7 +123,12 @@
       skin = pending;
       pending = null;
     }
-    game = create(freshSeed(), dims(skin));
+    if (pendingSize) {
+      size = pendingSize;
+      pendingSize = null;
+    }
+    game = create(freshSeed(), dims(skin, size.scale));
+    radii = game.radii;
     if (jiggleOn) markJiggle(game);
     faces.reset();
     bursts = [];
@@ -147,6 +146,20 @@
       restart();
     } else pending = s === skin ? null : s;
   }
+
+  /** pick a piece size: now if the jar is empty or finished, otherwise with the next game */
+  function pickSize(s: Size) {
+    writeSlot(SIZE, s.id);
+    if (game.drops === 0 || game.over) {
+      size = s;
+      pendingSize = null;
+      restart();
+    } else pendingSize = s === size ? null : s;
+  }
+  // the size picker's pictures: a few pieces drawn true to each other and to the
+  // biggest size, so big pieces look big
+  const biggestScale = Math.max(...SIZES.map((s) => s.scale));
+  const sizeFill = (tier: number, s: Size) => (0.42 * skin.tiers[tier].radius * s.scale) / (skin.tiers[4].radius * biggestScale);
 
   // the canvas fills the space it is given, at the screen's real pixel density
   let look: Theme;
@@ -168,13 +181,14 @@
     if (!nextEl) return;
     const dpr = Math.min(3, window.devicePixelRatio || 1);
     nextEl.width = nextEl.height = Math.round(48 * dpr);
-    preview(nextEl.getContext("2d")!, skin, next);
+    preview(nextEl.getContext("2d")!, skin, radii, next);
   });
   // a small picture of a tier, for the ladder and the looks
-  function tierIcon(el: HTMLCanvasElement, [look, tier, size]: [Skin, number, number]) {
+  // fill: how much of the box the piece takes (the size picker shows them growing)
+  function tierIcon(el: HTMLCanvasElement, [look, tier, px, fill]: [Skin, number, number, number?]) {
     const dpr = Math.min(3, window.devicePixelRatio || 1);
-    el.width = el.height = Math.round(size * dpr);
-    icon(el.getContext("2d")!, look, tier);
+    el.width = el.height = Math.round(px * dpr);
+    icon(el.getContext("2d")!, look, tier, fill);
   }
 
   // real time in, fixed 1/60 s steps out (the engine keeps the accumulator).
@@ -326,7 +340,7 @@
     <button id="about" class="icon" aria-label="about bloop" onclick={() => (sheet = "about")}>☰</button>
     <div class="stat" id="score"><span>score</span><b>{score}</b></div>
     <div class="stat" id="best">
-      <span>best</span>
+      <span>best <span id="best-size" class="best-size">{size.id}</span></span>
       <b>{best}{#if bestJiggled}<svg class="shake-mark" viewBox="0 0 24 24" role="img" aria-label="made with jiggle on"><title>made with jiggle on</title><rect x="8" y="4" width="8" height="16" rx="2" /><path d="M4.5 8q-2 4 0 8M19.5 8q2 4 0 8" /></svg>{/if}</b>
     </div>
     <div class="next" id="next" aria-label={`next: ${tiers[next].name}`}><canvas bind:this={nextEl}></canvas></div>
@@ -353,7 +367,10 @@
         <p>best <b>{best}</b></p>
         {#if jiggled}<p class="jiggled"><svg class="shake-mark" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="4" width="8" height="16" rx="2" /><path d="M4.5 8q-2 4 0 8M19.5 8q2 4 0 8" /></svg>jiggle on</p>{/if}
         <button id="again" class="big" onclick={restart}>play again</button>
-        <button id="over-looks" onclick={() => (sheet = "looks")}>looks</button>
+        <div class="row">
+          <button id="over-looks" onclick={() => (sheet = "looks")}>looks</button>
+          <button id="over-size" onclick={() => (sheet = "size")}>size</button>
+        </div>
       </div>
     {/if}
   </div>
@@ -373,6 +390,7 @@
         <p>drag along the jar to aim, let go to drop. two the same touch and <b>bloop</b> into the next one up.</p>
         <p>keep the jar under the dashed line. if something sits above it too long, the jar is full.</p>
         <button id="looks" onclick={() => (sheet = "looks")}>looks: {skin.name}{pending ? ` (next game: ${pending.name})` : ""}</button>
+        <button id="size" onclick={() => (sheet = "size")}>pieces: {size.id}{pendingSize ? ` (next game: ${pendingSize.id})` : ""}</button>
         <button id="jiggle" role="switch" aria-checked={jiggleOn} onclick={toggleJiggle}>jiggle: {jiggleOn ? "on" : "off"}</button>
         <p class="hint">shake your phone to jiggle the jar. a score made with jiggle on gets a little mark.</p>
         {#if jiggleNote}<p class="jiggle-note" role="status">{jiggleNote}</p>{/if}
@@ -419,6 +437,31 @@
           {/each}
         </ul>
         {#if pending}<p class="look-note" role="status">{pending.name} starts with your next game. this jar keeps going.</p>{/if}
+      {:else if sheet === "size"}
+        <h2>piece size</h2>
+        <p class="hint">bigger pieces fill the jar faster, so big is harder. each size keeps its own best.</p>
+        <ul class="looks">
+          {#each SIZES as s (s.id)}
+            <li>
+              <button
+                id={`size-${s.id}`}
+                class="look"
+                class:now={s === size}
+                class:next={s === pendingSize}
+                aria-pressed={(pendingSize ?? size) === s}
+                onclick={() => pickSize(s)}
+              >
+                <span class="look-name">{s.id} pieces</span>
+                <span class="look-pieces" aria-hidden="true">
+                  {#each [0, 2, 4] as i (i)}<canvas class="size-piece" use:tierIcon={[skin, i, 40, sizeFill(i, s)]}></canvas>{/each}
+                </span>
+                <span class="size-hint">{s.hint}</span>
+                {#if s === pendingSize}<span class="look-tag">next game</span>{:else if s === size && !pendingSize}<span class="look-tag">on</span>{:else if s === size}<span class="look-tag">this game</span>{/if}
+              </button>
+            </li>
+          {/each}
+        </ul>
+        {#if pendingSize}<p class="look-note" role="status">{pendingSize.id} pieces start with your next game. this jar keeps going.</p>{/if}
       {:else if sheet === "restart"}
         <h2>start over?</h2>
         <p>this jar goes away. your best score stays.</p>
