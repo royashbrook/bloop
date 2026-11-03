@@ -79,6 +79,9 @@ test("picking a size mid-game waits for the next game and leaves the run as it i
   await expect(page.locator(".look-note")).toContainText("small pieces start with your next game");
   await expect(page.locator("#size-small .look-tag")).toHaveText("next game");
   await expect(page.locator("#size-medium .look-tag")).toHaveText("this game");
+  // the waiting pick reads like the others: the hud's next-piece box styles never reach it
+  const paint = (id) => page.locator(`#size-${id}`).evaluate((b) => ({ ink: getComputedStyle(b.querySelector(".look-name")).color, tile: getComputedStyle(b.querySelector("canvas")).backgroundColor }));
+  expect(await paint("small")).toEqual(await paint("medium"));
   // the run is untouched: same game, same size, same pieces
   expect(await state(page)).toEqual(before);
   expect(before.scale).toBe(1.3);
