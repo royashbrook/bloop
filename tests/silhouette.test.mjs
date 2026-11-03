@@ -57,6 +57,25 @@ function recorder(shape, r, where) {
       path = [{ x, y, pad: 0 }, { x: x + w, y, pad: 0 }, { x, y: y + h, pad: 0 }, { x: x + w, y: y + h, pad: 0 }];
       check("a block");
     },
+    // a gradient is only a colour: it paints nothing by itself
+    createRadialGradient: () => ({ addColorStop() {} }),
+    createLinearGradient: () => ({ addColorStop() {} }),
+    // text (the numbers look): the whole em box, as wide as its max width, centred.
+    // a look that draws text must centre it and give a max width.
+    font: "",
+    textAlign: "",
+    textBaseline: "",
+    fillText: (text, x, y, maxWidth) => {
+      if (clipped) return;
+      const px = Number(/(\d+(?:\.\d+)?)px/.exec(ctx.font)?.[1]);
+      if (ctx.textAlign !== "center" || ctx.textBaseline !== "middle" || !(maxWidth > 0) || !(px > 0)) {
+        fails.push(`${where}: text "${text}" must be centred, with a max width and a font size`);
+        return;
+      }
+      const w = maxWidth / 2, h = px / 2;
+      path = [{ x: x - w, y: y - h, pad: 0 }, { x: x + w, y: y - h, pad: 0 }, { x: x - w, y: y + h, pad: 0 }, { x: x + w, y: y + h, pad: 0 }];
+      check(`text "${text}"`);
+    },
     clip: () => {
       // a clip is only safe if it is itself inside the outline
       if (!clipped) check("a clip");
