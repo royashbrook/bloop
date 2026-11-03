@@ -319,7 +319,8 @@ test("320 wide: the settings sheet and the hud's settings fit with no sideways s
   expect(tag.x).toBeGreaterThanOrEqual(best.x - 1);
   expect(tag.x + tag.width).toBeLessThanOrEqual(next.x);
   // a wider font (ci machines render wider than a mac) wraps the tag, never spills it
-  await page.addStyleTag({ content: "* { font-family: Verdana, sans-serif !important; letter-spacing: .04em !important }" });
+  // set from script, not an injected stylesheet: the live site's content security policy blocks those
+  await page.evaluate(() => document.querySelectorAll("*").forEach((e) => { e.style.fontFamily = "Verdana, sans-serif"; e.style.letterSpacing = ".04em"; }));
   const wideTag = await page.locator("#best-size").boundingBox();
   const wideBest = await page.locator("#best").boundingBox();
   expect(wideTag.x).toBeGreaterThanOrEqual(wideBest.x - 1);
