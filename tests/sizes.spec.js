@@ -165,8 +165,11 @@ for (const [label, raw, mark, jiggled] of [
 
 test("a failed best write keeps the last complete record, every size's best and mark, after a reload", async ({ page }) => {
   await page.addInitScript(() => {
-    if (!localStorage.getItem("bloop:best"))
+    // seeded once, on the first load only: a reload must find whatever the page left
+    if (!localStorage.getItem("test:seeded")) {
+      localStorage.setItem("test:seeded", "1");
       localStorage.setItem("bloop:best", JSON.stringify({ small: { score: 9, jiggled: false }, medium: { score: 1, jiggled: false }, big: { score: 3, jiggled: true } }));
+    }
     const set = Storage.prototype.setItem;
     Storage.prototype.setItem = function (k, v) {
       if (k.startsWith("bloop:best")) throw new DOMException("full", "QuotaExceededError");

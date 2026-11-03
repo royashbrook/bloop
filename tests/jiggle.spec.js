@@ -161,7 +161,11 @@ test("the best and its mark are saved as one record in one write", async ({ page
 test("a failed best write keeps the last complete record, score and mark together, after a reload", async ({ page }) => {
   await answer(page, "granted");
   await page.addInitScript(() => {
-    if (!localStorage.getItem("bloop:best")) localStorage.setItem("bloop:best", JSON.stringify({ medium: { score: 1, jiggled: false } }));
+    // seeded once, on the first load only: a reload must find whatever the page left
+    if (!localStorage.getItem("test:seeded")) {
+      localStorage.setItem("test:seeded", "1");
+      localStorage.setItem("bloop:best", JSON.stringify({ medium: { score: 1, jiggled: false } }));
+    }
     const set = Storage.prototype.setItem;
     Storage.prototype.setItem = function (k, v) {
       if (k.startsWith("bloop:best")) throw new DOMException("full", "QuotaExceededError");
