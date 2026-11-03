@@ -50,7 +50,11 @@ npm run dev     # vite prints the local url
   engine's collision events ([bumps.ts](src/lib/bumps.ts)). it is all
   render-only, so it never changes a game. with reduced motion on they hold
   still (no blink, no glance, no moments, no pop or ring), the squint, the beam,
-  comfy and a bump still show. see [faces.ts](src/lib/faces.ts).
+  comfy and a bump still show. see [faces.ts](src/lib/faces.ts). bubbles wear
+  the blob face, every mood included. numbers has no eyes, so a bump makes its
+  number jelly (squashed wide, a stretch, gone in about a third of a second, the
+  block itself never changes) and comfy sinks it in a touch. with reduced motion
+  the number holds still.
 - sound, made on the spot with web audio (no files): a soft plop for a drop and
   a bloop for every merge, each size its own. small ones are light, high and
   quick, bigger ones lower, longer and rounder, and the biggest a deep wobbly
@@ -75,7 +79,11 @@ npm run dev     # vite prints the local url
     of the same fixed 1/60 s steps a real second: gravity, the step and every
     piece are unchanged, so a game is the same steps, only sooner, and settles
     and holds exactly as it does at 1. the full jar still takes two real
-    seconds above the line at any speed.
+    seconds above the line at any speed. at a speed like 1.25 a frame runs one
+    step, then two, so each piece is drawn between where it was before the last
+    step and where it is now, as far along as the clock is toward the next step.
+    drawing only: the engine and every replay are unchanged
+    ([smooth.ts](src/lib/smooth.ts)).
   - every score keeps the settings it was made with: a best per size and speed,
     all in one saved record. older bests move to the settings they were played
     at, all at speed 1: small, medium and big to 1, 1.3 and 1.5, and anything

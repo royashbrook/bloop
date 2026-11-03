@@ -2,6 +2,7 @@
 import { heldX, JAR, type Game } from "./engine/game.ts";
 import { extent } from "./engine/shapes.ts";
 import type { Faces } from "./faces.ts";
+import { share, type Smoother } from "./smooth.ts";
 import { CALM, type FaceState, type Skin } from "./skins/types.ts";
 
 /** space around the jar for its walls, in world units */
@@ -90,6 +91,8 @@ export function render(
   faces: Faces,
   /** prefers-reduced-motion: no pop, no ring (the faces handle their own) */
   still = false,
+  /** draw each piece between its last two steps (smooth.ts); left out: where it is */
+  smooth?: Smoother,
 ) {
   const c = ctx.canvas;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -137,10 +140,13 @@ export function render(
   }
 
   faces.update(g, now, still);
+  smooth?.frame(g);
+  const alpha = share(g);
   for (const p of g.live) {
     const age = g.steps - p.born;
     const pop = !still && p.made && age < POP_STEPS ? 0.75 + 0.25 * easeOutBack(age / POP_STEPS) : 1;
-    faces.drew(p.id, piece(ctx, skin, p.tier, p.body.position.x, p.body.position.y, p.r, p.body.angle, faces.get(p.id), pop));
+    const at = smooth ? smooth.pose(p, alpha) : { x: p.body.position.x, y: p.body.position.y, angle: p.body.angle };
+    faces.drew(p.id, piece(ctx, skin, p.tier, at.x, at.y, p.r, at.angle, faces.get(p.id), pop));
   }
 
   if (!still) for (const b of bursts) {

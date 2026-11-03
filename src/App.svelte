@@ -4,6 +4,7 @@
   import { askMotion, shaker } from "./lib/shake.ts";
   import { icon, preview, render, theme, VIEW, MARGIN, BURST_LIFE, type Burst, type Theme } from "./lib/draw.ts";
   import { faces as makeFaces } from "./lib/faces.ts";
+  import { smoother } from "./lib/smooth.ts";
   import { SKINS, skinById } from "./lib/skins/index.ts";
   import { dims, type Skin } from "./lib/skins/types.ts";
   import { readSlot, writeSlot } from "./lib/storage.ts";
@@ -29,6 +30,8 @@
   let pending = $state.raw<Skin | null>(null);
   const tiers = $derived(skin.tiers);
   const faces = makeFaces();
+  // pieces drawn between their last two steps, so a speed like 1.25 moves smoothly
+  const smooth = smoother();
   // the piece size and the speed: a number each, off a slider, for every look.
   // like a look, a change mid-game waits for the next game, and the pick is saved.
   // an old size name (small, medium, big) reads as the size it was.
@@ -107,6 +110,7 @@
     speed: () => ({ now: speed, next: pendingSpeed }),
     faces: () => faces.report(game),
     sound: () => sfx.report(),
+    drawn: () => smooth.report(),
   };
 
   function sync() {
@@ -267,7 +271,7 @@
     }
     bursts = bursts.filter((b) => now - b.at < BURST_LIFE);
     const ctx = jarEl?.getContext("2d");
-    if (ctx && look) render(ctx, game, skin, look, scale, bursts, now, faces, still?.matches ?? false);
+    if (ctx && look) render(ctx, game, skin, look, scale, bursts, now, faces, still?.matches ?? false, smooth);
     raf = requestAnimationFrame(frame);
   }
   let visible = $state(true);
@@ -403,6 +407,7 @@
     observer?.disconnect();
     dark?.removeEventListener("change", repaint);
     cancelAnimationFrame(raf);
+    smooth.stop();
     clearTimeout(flairTimer);
     if (typeof removeEventListener === "function") {
       removeEventListener("keydown", key);
