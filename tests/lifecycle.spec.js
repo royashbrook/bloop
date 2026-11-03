@@ -17,7 +17,7 @@ test("the page and the about sheet carry the house ethos, word for word", async 
   await expect(page.locator(".ethos")).toHaveText(ETHOS);
   await expect(page.locator(".maker")).toContainText("made with love by");
   await expect(page.locator(".ladder li")).toHaveCount(11);
-  await expect(page.locator(".ladder")).toContainText("whale");
+  await expect(page.locator(".ladder")).toContainText("big bloop");
 });
 
 test("the build is on screen, and in the about sheet", async ({ page }) => {

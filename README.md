@@ -21,8 +21,8 @@ npm run dev     # vite prints the local url
   jar when anything settled stays above the dashed line for two seconds. see
   [game.ts](src/lib/engine/game.ts).
 - real physics from [matter-js](https://github.com/liabru/matter-js), stepped at
-  a fixed 1/60 s from an accumulator, so the same seed and the same drops replay
-  the same game. the engine has no DOM; node tests play whole games headless.
+  a fixed 1/60 s from an accumulator, so the same seed, size, speed and drops
+  replay the same game. the engine has no DOM; node tests play whole games headless.
 - one thumb: drag anywhere under the hud to aim, let go to drop, or tap to drop
   there. arrow keys aim, space drops.
 - two of a kind join on the first touch: a live contact, or their outlines
@@ -30,8 +30,10 @@ npm run dev     # vite prints the local url
   the edge and nothing a piece draws reaches past it, so the edge you see is the
   edge that touches.
 - looks are data: a skin is a list of tiers (name, size as a fraction of the jar
-  width, colour, shape, a draw function) and a face. four ship: cells, puppies,
-  kitties and shapes ([skins/](src/lib/skins)). a shape is a circle, a rounded
+  width, colour, shape, a draw function) and a face. six ship: bubbles (the
+  default, round soap bubbles with faces), numbers (rounded blocks from 2 to
+  2048: two of a number make the double), cells, puppies, kitties and shapes
+  ([skins/](src/lib/skins)). a player who picked a look keeps it. a shape is a circle, a rounded
   square, hexagon or triangle, built by the engine from the same outline the
   screen draws, with the area of the circle it stands in for. pick a look from
   the about sheet: an empty or finished jar switches at once, mid-game it waits
@@ -43,14 +45,27 @@ npm run dev     # vite prints the local url
   made. it is all render-only, so it never changes a game. with reduced motion
   on they hold still (no blink, no glance, no pop or ring), the squint and the
   beam still show. see [faces.ts](src/lib/faces.ts).
-- piece size: small, medium (the default) or big, from the about sheet. one
-  number scales every tier of every look, once, when a game is made, so the
-  physics, the join, the drawing and the wall clamp all agree. bigger pieces fill
-  the jar sooner: big is hard, small is easy. like a look, a change mid-game
-  waits for the next game. each size keeps its own best, all in one saved
-  record; a best saved before sizes was played at small (scale 1). sizes were
-  picked with the random bot: median drops to a full jar 192 at small, 102 at
-  medium, 74 at big ([sizes.ts](src/lib/sizes.ts)).
+- size and speed: two sliders on one sheet, from the about sheet or a full
+  jar's card. like a look, a change mid-game waits for the next game.
+  - piece size runs 1 to 3 in tenths, 1.5 by default (the old "big"). one number
+    grows every tier of every look, once, when a game is made, so the physics,
+    the join, the drawing and the wall clamp all agree. up to 1.5 every piece is
+    its own size times the number, so 1, 1.3 and 1.5 are the old small, medium
+    and big exactly. past 1.5 the top tier has no room left to double, so each
+    tier eases toward a ceiling of its own, each at least 8% over the one below,
+    the biggest 62% of the jar across ([size.ts](src/lib/engine/size.ts)). the
+    slider's picture shows the drops at that size as you drag. median drops to a
+    full jar for the random bot over 20 seeds at speed 1.25: 193 at 1, 75 at
+    1.5, 46 at 2, 38 at 2.5, 30 at 3.
+  - speed runs 0.75 to 2 in quarters, 1.25 by default. speed s runs s times 60
+    of the same fixed 1/60 s steps a real second: gravity, the step and every
+    piece are unchanged, so a game is the same steps, only sooner, and settles
+    and holds exactly as it does at 1. the full jar still takes two real
+    seconds above the line at any speed.
+  - every score keeps the settings it was made with: a best per size and speed,
+    all in one saved record. older bests move to the settings they were played
+    at, all at speed 1: small, medium and big to 1, 1.3 and 1.5, and anything
+    from before sizes to 1.
 - jiggle, off by default: switch it on in the about sheet and shake the phone
   to toss the pieces up (on iOS the switch is the tap that asks for motion). it
   is an input like a drop, seeded, so a replay is the same game, and a shake that
@@ -64,7 +79,7 @@ npm run dev     # vite prints the local url
 
 ```sh
 npm test              # engine rules, determinism, a random bot, looks, faces
-npm run bot           # how far a random bot gets over 20 seeds (npm run bot -- 20 1.3: at a piece size)
+npm run bot           # how far a random bot gets over 20 seeds (npm run bot -- 20 2.5 1.25: at a size and speed)
 npm run check         # svelte-check
 npm run build         # dist/, with /version.json
 npx playwright install chromium webkit
