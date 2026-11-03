@@ -74,3 +74,77 @@ test("a new biggest and two of the biggest gone get a sparkle; a plain merge and
   assert.equal(vanish.sparkle, true);
   assert.ok(vanish.length > tone("merge", 10).length);
 });
+
+// the player, with a stand-in for web audio whose clock the test moves by hand
+function fake() {
+  const log = { starts: [], clock: 0 };
+  const param = () => ({ value: 0, setValueAtTime(v) { this.value = v; }, exponentialRampToValueAtTime() {} });
+  const node = (extra) => ({ connect: (n) => n, ...extra });
+  globalThis.document = { hidden: false };
+  globalThis.AudioContext = class {
+    state = "running";
+    sampleRate = 8000;
+    destination = node({});
+    get currentTime() { return log.clock; }
+    resume() { this.state = "running"; return Promise.resolve(); }
+    suspend() { this.state = "suspended"; return Promise.resolve(); }
+    createGain() { return node({ gain: param() }); }
+    createDynamicsCompressor() { return node({ threshold: param(), knee: param(), ratio: param(), attack: param(), release: param() }); }
+    createBiquadFilter() { return node({ frequency: param(), Q: param() }); }
+    createBuffer(_c, n) { const d = new Float32Array(n); return { getChannelData: () => d }; }
+    createBufferSource() { return node({ start() {}, stop() {} }); }
+    createOscillator() {
+      const o = node({ type: "sine", frequency: param() });
+      o.start = () => o.type === "sine" && log.starts.push(o.frequency.value);
+      o.stop = () => {};
+      return o;
+    }
+  };
+  return log;
+}
+const merge = (tier) => ({ tier, vanish: false, first: false, big: false });
+
+test("at most eight sounds at once: a pile of merges in one frame plays eight, the rest are let go", async () => {
+  const { createSound, MAX_VOICES } = await import("../src/lib/sound.ts");
+  const log = fake();
+  const s = createSound(true);
+  s.wake();
+  s.merges(Array.from({ length: 12 }, () => merge(1)));
+  assert.equal(MAX_VOICES, 8);
+  assert.equal(s.report().played, MAX_VOICES);
+  assert.equal(s.report().voices, MAX_VOICES);
+  // once they ring out there is room again
+  log.clock = 5;
+  s.merges([merge(1)]);
+  assert.equal(s.report().played, MAX_VOICES + 1);
+});
+
+test("merges close together step up as a chain; a pause starts it over", async () => {
+  const { createSound } = await import("../src/lib/sound.ts");
+  const log = fake();
+  const s = createSound(true);
+  s.wake();
+  const at = (t) => {
+    log.clock = t;
+    log.starts.length = 0;
+    s.merges([merge(3)]);
+    return log.starts[0];
+  };
+  const steps = [0, 0.3, 0.6, 0.9].map(at);
+  for (let i = 0; i < 4; i++) assert.ok(Math.abs(steps[i] - tone("merge", 3, i).from) < 1e-6, `step ${i}`);
+  assert.ok(Math.abs(at(3) - tone("merge", 3, 0).from) < 1e-6, "a pause starts over");
+});
+
+test("muted, nothing plays and no audio is made", async () => {
+  const { createSound } = await import("../src/lib/sound.ts");
+  let made = 0;
+  fake();
+  const Real = globalThis.AudioContext;
+  globalThis.AudioContext = class extends Real { constructor() { super(); made++; } };
+  const s = createSound(false);
+  s.wake();
+  s.drop(2);
+  s.merges([merge(4)]);
+  assert.equal(made, 0);
+  assert.equal(s.report().played, 0);
+});

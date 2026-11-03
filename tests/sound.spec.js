@@ -156,10 +156,14 @@ test("a hidden page goes quiet at once, and picks up on return; so does a page l
 });
 
 test.describe("with reduced motion", () => {
-  test("sound still plays", async ({ page }) => {
+  test("a drop and a merge still sound", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
-    await page.goto("/");
+    const { seed, tier } = twinSeed();
+    await page.goto(`/?seed=${seed}`);
     await tapJar(page);
-    await expect.poll(() => audio(page).then((a) => a.starts.length)).toBeGreaterThan(0);
+    await expect.poll(() => audio(page).then((a) => a.starts.filter((s) => near(s.freq, tone("drop", tier).from)).length)).toBe(1);
+    await expect.poll(() => state(page).then((s) => s.cooldown)).toBe(0);
+    await tapJar(page);
+    await expect.poll(() => audio(page).then((a) => a.starts.filter((s) => near(s.freq, tone("merge", tier + 1).from)).length)).toBe(1);
   });
 });
