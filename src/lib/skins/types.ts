@@ -52,8 +52,9 @@ export interface Skin {
   spin: boolean;
 }
 
-/** the part of a skin the engine needs */
-export const dims = (skin: Skin) => ({
+/** the part of a skin the engine needs, at a piece size (1: the skin's own) */
+export const dims = (skin: Skin, scale = 1) => ({
   radii: skin.tiers.map((t) => t.radius),
   shapes: skin.tiers.map((t) => t.shape ?? "circle"),
+  scale,
 });

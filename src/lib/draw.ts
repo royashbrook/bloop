@@ -6,7 +6,12 @@ import { CALM, type FaceState, type Skin } from "./skins/types.ts";
 
 /** space around the jar for its walls, in world units */
 export const MARGIN = 10;
-export const VIEW = { width: JAR.width + MARGIN * 2, height: JAR.height + MARGIN };
+/**
+ * room above the rim, in world units, so the biggest piece the biggest size can
+ * drop is drawn whole while it waits (it reaches about 8 units over the rim)
+ */
+export const HEADROOM = 10;
+export const VIEW = { width: JAR.width + MARGIN * 2, height: HEADROOM + JAR.height + MARGIN };
 
 export interface Theme {
   sunk: string;
@@ -83,7 +88,7 @@ export function render(
   const c = ctx.canvas;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, c.width, c.height);
-  ctx.setTransform(scale, 0, 0, scale, MARGIN * scale, 0);
+  ctx.setTransform(scale, 0, 0, scale, MARGIN * scale, HEADROOM * scale);
 
   // the jar: a soft rounded inside and a thick wall
   const { width: W, height: H } = JAR;
@@ -234,17 +239,17 @@ function lip(ctx: CanvasRenderingContext2D, look: Theme) {
   ctx.restore();
 }
 
-/** the next piece, centred in a small canvas */
-export function preview(ctx: CanvasRenderingContext2D, skin: Skin, tier: number) {
+/** the next piece, centred in a small canvas, at the game's own sizes */
+export function preview(ctx: CanvasRenderingContext2D, skin: Skin, radii: readonly number[], tier: number) {
   const c = ctx.canvas;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, c.width, c.height);
   // the biggest drop fills most of the box; the smallest stay small, so size reads true
-  const biggest = skin.tiers[4].radius * JAR.width;
+  const biggest = radii[4];
   // a shape that reaches past its circle (a triangle) shrinks to stay in the box
   const s = (Math.min(c.width, c.height) * 0.4) / biggest / Math.max(1, extent(skin.tiers[tier].shape ?? "circle") / 1.2);
   ctx.setTransform(s, 0, 0, s, c.width / 2, c.height / 2);
-  piece(ctx, skin, tier, 0, 0, skin.tiers[tier].radius * JAR.width, 0);
+  piece(ctx, skin, tier, 0, 0, radii[tier], 0);
 }
 
 /** a small picture of one tier, filling a share of a square canvas */

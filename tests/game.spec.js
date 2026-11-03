@@ -81,7 +81,8 @@ test("the held piece stays inside the walls however far the finger goes", async 
   // the finger keeps the piece while it slides off the jar, to the screen edges
   await page.mouse.move(1, start.y);
   const s = await state(page);
-  const r = cells.tiers[s.held].radius * JAR.width;
+  // the held piece's own size, at the game's piece size
+  const r = cells.tiers[s.held].radius * JAR.width * s.scale;
   expect(s.x).toBeCloseTo(r, 5);
   await page.mouse.move(389, start.y);
   expect((await state(page)).x).toBeCloseTo(JAR.width - r, 5);
@@ -226,7 +227,6 @@ test("two of a kind that land with their outlines touching join", async ({ page 
     if (g.held === g.next && g.held <= 1) break;
   }
   const tier = create(seed, dims(cells)).held;
-  const r = cells.tiers[tier].radius * JAR.width;
   await page.goto(`/?seed=${seed}`);
   const box = await page.locator("#jar").boundingBox();
   const perUnit = box.width / (JAR.width + 20);
@@ -238,6 +238,8 @@ test("two of a kind that land with their outlines touching join", async ({ page 
   await page.mouse.up();
   await expect.poll(() => state(page).then((s) => s.pieces.length === 1 && Math.abs(s.pieces[0].vy) < 0.01 && s.cooldown === 0)).toBe(true);
   const first = (await state(page)).pieces[0];
+  // its size in this game, at the piece size the game was made with
+  const r = first.r;
   // aim the second so its edge sits half a unit from the first one's
   const want = first.x + 2 * r + 0.5;
   const guess = Math.round(box.x + (want + 10) * perUnit);

@@ -154,13 +154,18 @@ test("the best and its mark are saved as one record in one write", async ({ page
   const writes = await page.evaluate(() => window.__writes);
   expect(new Set(writes)).toEqual(new Set(["bloop:best"]));
   const record = JSON.parse(await page.evaluate(() => localStorage.getItem("bloop:best")));
-  expect(record).toEqual({ score: (await state(page)).score, jiggled: true });
+  // a best per piece size: this one was made at medium, the default
+  expect(record.medium).toEqual({ score: (await state(page)).score, jiggled: true });
 });
 
 test("a failed best write keeps the last complete record, score and mark together, after a reload", async ({ page }) => {
   await answer(page, "granted");
   await page.addInitScript(() => {
-    if (!localStorage.getItem("bloop:best")) localStorage.setItem("bloop:best", JSON.stringify({ score: 1, jiggled: false }));
+    // seeded once, on the first load only: a reload must find whatever the page left
+    if (!localStorage.getItem("test:seeded")) {
+      localStorage.setItem("test:seeded", "1");
+      localStorage.setItem("bloop:best", JSON.stringify({ medium: { score: 1, jiggled: false } }));
+    }
     const set = Storage.prototype.setItem;
     Storage.prototype.setItem = function (k, v) {
       if (k.startsWith("bloop:best")) throw new DOMException("full", "QuotaExceededError");
@@ -201,6 +206,8 @@ for (const [jiggled, marks] of [["1", 1], [null, 0]])
   test(`an older saved best still loads, ${marks ? "with" : "without"} its jiggle mark`, async ({ page }) => {
     await page.addInitScript((j) => {
       if (localStorage.getItem("bloop:best")) return;
+      // an older best was played before sizes, at small
+      localStorage.setItem("bloop:size", "small");
       localStorage.setItem("bloop:best", "40");
       if (j) localStorage.setItem("bloop:best-jiggled", j);
     }, jiggled);

@@ -43,6 +43,14 @@ npm run dev     # vite prints the local url
   made. it is all render-only, so it never changes a game. with reduced motion
   on they hold still (no blink, no glance, no pop or ring), the squint and the
   beam still show. see [faces.ts](src/lib/faces.ts).
+- piece size: small, medium (the default) or big, from the about sheet. one
+  number scales every tier of every look, once, when a game is made, so the
+  physics, the join, the drawing and the wall clamp all agree. bigger pieces fill
+  the jar sooner: big is hard, small is easy. like a look, a change mid-game
+  waits for the next game. each size keeps its own best, all in one saved
+  record; a best saved before sizes was played at small (scale 1). sizes were
+  picked with the random bot: median drops to a full jar 192 at small, 102 at
+  medium, 74 at big ([sizes.ts](src/lib/sizes.ts)).
 - jiggle, off by default: switch it on in the about sheet and shake the phone
   to toss the pieces up (on iOS the switch is the tap that asks for motion). it
   is an input like a drop, seeded, so a replay is the same game, and a shake that
@@ -56,7 +64,7 @@ npm run dev     # vite prints the local url
 
 ```sh
 npm test              # engine rules, determinism, a random bot, looks, faces
-npm run bot           # how far a random bot gets over 20 seeds
+npm run bot           # how far a random bot gets over 20 seeds (npm run bot -- 20 1.3: at a piece size)
 npm run check         # svelte-check
 npm run build         # dist/, with /version.json
 npx playwright install chromium webkit

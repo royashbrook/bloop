@@ -133,14 +133,14 @@ a {
   font-size: 11px;
   color: var(--ink-dim);
 }
-.next {
+.hud .next {
   display: flex;
   flex-direction: column;
   align-items: center;
   font-size: 11px;
   color: var(--ink-dim);
 }
-.next canvas {
+.hud .next canvas {
   width: 48px;
   height: 48px;
   border-radius: 14px;
@@ -152,7 +152,8 @@ a {
   position: relative;
   min-height: 0;
   display: flex;
-  align-items: flex-start;
+  /* a phone taller than the jar gets the spare room split above and below it */
+  align-items: center;
   justify-content: center;
   touch-action: none;
   user-select: none;
@@ -197,7 +198,7 @@ a {
   }
 }
 .careful {
-  top: 2px;
+  top: calc(var(--jar-top, 0px) + 2px);
   font-size: 13px;
   padding: 3px 10px;
   background: var(--warn);
@@ -343,6 +344,24 @@ a {
 }
 .look-note {
   color: var(--ink-dim);
+}
+/* the piece sizes: same buttons as the looks, a line on how hard each is */
+.size-hint {
+  grid-column: 1 / -1;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-dim);
+}
+.look-pieces .size-piece {
+  width: 40px;
+  height: 40px;
+}
+/* the size a best was made at, small, next to the word best */
+.best-size {
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--surface-sunk);
+  font-weight: 700;
 }
 /* jiggle: a small phone-shake mark next to a score made with it on */
 .shake-mark {
