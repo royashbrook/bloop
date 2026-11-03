@@ -65,6 +65,12 @@ export function piece(
   ctx.save();
   ctx.translate(x + (f.x ?? 0) * r * scale, y + (f.y ?? 0) * r * scale);
   if (scale !== 1) ctx.scale(scale, scale);
+  // getting comfy: the face sinks in a touch and spreads, then comes back
+  const sink = face.settle ?? 0;
+  if (sink) {
+    ctx.translate(0, r * 0.05 * sink);
+    ctx.scale(1 + 0.06 * sink, 1 - 0.06 * sink);
+  }
   const m = ctx.getTransform();
   skin.face(ctx, 0, 0, r * (f.s ?? 1), face, t);
   ctx.restore();
