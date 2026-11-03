@@ -167,3 +167,27 @@ test.describe("with reduced motion", () => {
     await expect.poll(() => audio(page).then((a) => a.starts.filter((s) => near(s.freq, tone("merge", tier + 1).from)).length)).toBe(1);
   });
 });
+
+// speed runs more steps a frame, the sounds keep real time: every drop and every
+// merge still gets its sound, however many steps a frame ran them in
+for (const speed of ["0.75", "2"])
+  test(`at speed ${speed} every drop plops and every merge bloops`, async ({ page }) => {
+    await page.addInitScript((s) => localStorage.setItem("bloop:speed", s), speed);
+    await page.clock.install();
+    await page.goto("/?seed=7");
+    expect((await state(page)).speed).toBe(Number(speed));
+    const box = await page.locator("#jar").boundingBox();
+    const xs = [0.2, 0.5, 0.8, 0.35, 0.65];
+    for (let i = 0; i < 16; i++) {
+      await page.mouse.click(box.x + box.width * xs[i % xs.length], box.y + box.height * 0.5);
+      await page.clock.runFor(900);
+    }
+    await page.clock.runFor(3000);
+    const s = await state(page);
+    expect(s.over).toBe(false);
+    // each merge takes two pieces and leaves one
+    const merges = s.drops - s.pieces.length;
+    expect(merges).toBeGreaterThan(3);
+    const { played } = await page.evaluate(() => window.__bloop.sound());
+    expect(played).toBe(s.drops + merges);
+  });
