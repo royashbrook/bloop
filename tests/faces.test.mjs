@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import Matter from "matter-js";
 import { aim, create, drop, JAR, place, snapshot, step } from "../src/lib/engine/game.ts";
 import { rng } from "../src/lib/engine/rng.ts";
-import { BLINK_MS, COMFY_MS, faces, HAPPY_STEPS, SETTLE_MS } from "../src/lib/faces.ts";
+import { BLINK_MS, COMFY_MS, faces, HAPPY_STEPS, JOLT_MS, SETTLE_MS } from "../src/lib/faces.ts";
 import { cells } from "../src/lib/skins/cells.ts";
 import { dims } from "../src/lib/skins/types.ts";
 
@@ -341,4 +341,57 @@ test("a moment never moves a blink: close neighbours blink just as far-apart one
   const { glance, around, snuggle } = near.counts;
   assert.ok(glance > 0 && glance + around + snuggle > 5, JSON.stringify(near.counts));
   assert.deepEqual(near.out, far.out);
+});
+
+test("a bump jolts: squashed at the hit, a stretch, then gone well before the bump face ends", () => {
+  const hard = fall(300);
+  const trail = [];
+  for (let t = FRAME; t < 2000; t += FRAME) {
+    step(hard.g);
+    hard.f.update(hard.g, t, false);
+    const s = hard.f.get(hard.floor);
+    trail.push({ t, mood: s.mood, jolt: s.jolt ?? 0 });
+  }
+  const hit = trail.findIndex((x) => x.mood === "oof");
+  assert.ok(hit >= 0, "it was hit");
+  const during = trail.slice(hit).filter((x) => x.t - trail[hit].t < JOLT_MS);
+  // squashed hard at the hit, stretched a little after
+  assert.ok(during[0].jolt > 0.9, `at the hit ${during[0].jolt}`);
+  assert.ok(during.some((x) => x.jolt < -0.2), `a stretch: ${during.map((x) => x.jolt.toFixed(2))}`);
+  // gone once the jolt is over, while the face still says oof
+  const after = trail.slice(hit).filter((x) => x.t - trail[hit].t >= JOLT_MS && x.mood === "oof");
+  assert.ok(after.length > 0 && after.every((x) => x.jolt === 0), "still oof, no jolt");
+  // and never outside a bump
+  assert.ok(trail.every((x) => x.jolt === 0 || x.mood === "bump" || x.mood === "oof"));
+});
+
+test("reduced motion: a bump shows, it does not jolt", () => {
+  const hard = fall(300);
+  let oof = 0;
+  for (let t = FRAME; t < 2000; t += FRAME) {
+    step(hard.g);
+    hard.f.update(hard.g, t, true);
+    for (const p of hard.g.live) {
+      const s = hard.f.get(p.id);
+      if (s.mood === "oof") oof++;
+      assert.equal(s.jolt ?? 0, 0);
+    }
+  }
+  assert.ok(oof > 0);
+});
+
+test("at speed 2, two steps a frame: a hit still makes a face on both, and the faller still gets comfy", () => {
+  for (const per of [2, 3]) {
+    const hard = fall(300);
+    const moods = new Map();
+    for (let t = FRAME; t < 4000; t += FRAME) {
+      for (let i = 0; i < per; i++) step(hard.g);
+      hard.f.update(hard.g, t, false);
+      for (const p of hard.f.report(hard.g).list) (moods.get(p.id) ?? moods.set(p.id, new Set()).get(p.id)).add(p.mood);
+    }
+    assert.ok(moods.get(hard.floor).has("oof"), `${per} a frame, floor: ${[...moods.get(hard.floor)]}`);
+    assert.ok(moods.get(hard.faller).has("oof"), `${per} a frame, faller: ${[...moods.get(hard.faller)]}`);
+    assert.ok(moods.get(hard.faller).has("comfy"), `${per} a frame, faller: ${[...moods.get(hard.faller)]}`);
+    assert.equal(hard.f.report(hard.g).counts.bump, 2);
+  }
 });

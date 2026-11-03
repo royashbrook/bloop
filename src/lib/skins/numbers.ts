@@ -28,11 +28,27 @@ function draw(this: Tier, ctx: CanvasRenderingContext2D, x: number, y: number, r
   ctx.restore();
 }
 
-/** the number, centred, big and clear, in a deep shade of the block's own colour */
-export const numeral: Face = (ctx, x, y, r, _f, tier) => {
+/** how far a bump squashes the number: a soft one, and a hard one (oof) */
+export const JOLT = { bump: 0.14, oof: 0.22 };
+
+/**
+ * the number, centred, big and clear, in a deep shade of the block's own colour.
+ * no eyes to show a mood with, so a bump makes the number jelly: squashed wide
+ * at the hit, a stretch, a smaller squash, gone (the jolt, none with reduced
+ * motion). comfy sinks it in a touch, like every face. the block never changes.
+ */
+export const numeral: Face = (ctx, x, y, r, f, tier) => {
   const text = tier.name;
   const px = r * TEXT_SIZE[Math.min(TEXT_SIZE.length, text.length) - 1];
   ctx.save();
+  const k = f.jolt ? f.jolt * (f.mood === "oof" ? JOLT.oof : JOLT.bump) : 0;
+  if (k) {
+    // squash about the number's foot, so it presses down like it was sat on
+    const foot = y + px * 0.5;
+    ctx.translate(x, foot);
+    ctx.scale(1 + k, 1 - k);
+    ctx.translate(-x, -foot);
+  }
   ctx.font = `800 ${px}px ${FONT}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";

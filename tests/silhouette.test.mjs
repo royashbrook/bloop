@@ -26,8 +26,15 @@ function poke(shape, r, x, y, pad) {
   return worst;
 }
 
-function recorder(shape, r, where) {
+/**
+ * moves: a face may squash itself (numbers on a bump): translate and scale are
+ * followed, so every point is checked where it really lands. a body may not move.
+ */
+function recorder(shape, r, where, moves = false) {
   let path = [], clipped = false;
+  // the canvas's own scale and shift: x' = sx x + tx, y' = sy y + ty
+  let m = { sx: 1, sy: 1, tx: 0, ty: 0 };
+  const at = (x, y, pad) => ({ x: m.sx * x + m.tx, y: m.sy * y + m.ty, pad: pad * Math.max(Math.abs(m.sx), Math.abs(m.sy)) });
   const stack = [];
   const fails = [];
   const check = (what, extra = 0) => {
@@ -44,17 +51,17 @@ function recorder(shape, r, where) {
     lineJoin: "",
     beginPath: () => (path = []),
     closePath() {},
-    moveTo: (x, y) => path.push({ x, y, pad: 0 }),
-    lineTo: (x, y) => path.push({ x, y, pad: 0 }),
+    moveTo: (x, y) => path.push(at(x, y, 0)),
+    lineTo: (x, y) => path.push(at(x, y, 0)),
     // a curve stays inside the hull of its points
-    quadraticCurveTo: (cx, cy, x, y) => path.push({ x: cx, y: cy, pad: 0 }, { x, y, pad: 0 }),
-    arc: (x, y, rad) => path.push({ x, y, pad: rad }),
-    ellipse: (x, y, rx, ry) => path.push({ x, y, pad: Math.max(rx, ry) }),
+    quadraticCurveTo: (cx, cy, x, y) => path.push(at(cx, cy, 0), at(x, y, 0)),
+    arc: (x, y, rad) => path.push(at(x, y, rad)),
+    ellipse: (x, y, rx, ry) => path.push(at(x, y, Math.max(rx, ry))),
     fill: () => clipped || check("a fill"),
-    stroke: () => clipped || check("a line", ctx.lineWidth / 2),
+    stroke: () => clipped || check("a line", (ctx.lineWidth / 2) * Math.max(Math.abs(m.sx), Math.abs(m.sy))),
     fillRect: (x, y, w, h) => {
       if (clipped) return;
-      path = [{ x, y, pad: 0 }, { x: x + w, y, pad: 0 }, { x, y: y + h, pad: 0 }, { x: x + w, y: y + h, pad: 0 }];
+      path = [at(x, y, 0), at(x + w, y, 0), at(x, y + h, 0), at(x + w, y + h, 0)];
       check("a block");
     },
     // a gradient is only a colour: it paints nothing by itself
@@ -73,7 +80,7 @@ function recorder(shape, r, where) {
         return;
       }
       const w = maxWidth / 2, h = px / 2;
-      path = [{ x: x - w, y: y - h, pad: 0 }, { x: x + w, y: y - h, pad: 0 }, { x: x - w, y: y + h, pad: 0 }, { x: x + w, y: y + h, pad: 0 }];
+      path = [at(x - w, y - h, 0), at(x + w, y - h, 0), at(x - w, y + h, 0), at(x + w, y + h, 0)];
       check(`text "${text}"`);
     },
     clip: () => {
@@ -81,11 +88,15 @@ function recorder(shape, r, where) {
       if (!clipped) check("a clip");
       clipped = true;
     },
-    save: () => stack.push(clipped),
-    restore: () => (clipped = stack.pop()),
+    save: () => stack.push({ clipped, m: { ...m } }),
+    restore: () => ({ clipped, m } = stack.pop()),
   };
-  for (const no of ["translate", "rotate", "scale", "setTransform"])
+  for (const no of moves ? ["rotate", "setTransform"] : ["translate", "rotate", "scale", "setTransform"])
     ctx[no] = () => fails.push(`${where}: a tier must not move the canvas (${no})`);
+  if (moves) {
+    ctx.translate = (x, y) => ((m.tx += m.sx * x), (m.ty += m.sy * y));
+    ctx.scale = (x, y) => ((m.sx *= x), (m.sy *= y));
+  }
   return { ctx, fails };
 }
 
@@ -100,6 +111,10 @@ const MOODS = [
   { blink: false, lx: 0, ly: 0, mood: "comfy" },
   { blink: false, lx: 0, ly: 0, mood: "bump" },
   { blink: false, lx: 0, ly: 0, mood: "oof" },
+  // a bump's jolt at its squash and at its stretch
+  { blink: false, lx: 0, ly: 0, mood: "bump", jolt: 1 },
+  { blink: false, lx: 0, ly: 0, mood: "oof", jolt: 1 },
+  { blink: false, lx: 0, ly: 0, mood: "oof", jolt: -1 },
 ];
 
 for (const skin of SKINS)
@@ -113,7 +128,7 @@ for (const skin of SKINS)
       fails.push(...body.fails);
       const f = t.face ?? {};
       for (const m of MOODS) {
-        const face = recorder(shape, r, `${t.name} ${m.mood}${m.blink ? " blink" : ""}${m.lx ? " look" : ""}`);
+        const face = recorder(shape, r, `${t.name} ${m.mood}${m.blink ? " blink" : ""}${m.lx ? " look" : ""}${m.jolt ? ` jolt ${m.jolt}` : ""}`, true);
         skin.face(face.ctx, (f.x ?? 0) * r, (f.y ?? 0) * r, r * (f.s ?? 1), m, t);
         fails.push(...face.fails);
       }

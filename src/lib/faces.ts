@@ -35,6 +35,8 @@ const SNUGGLE_CHANCE = 0.18;
 const AROUND_CHANCE = 0.17;
 /** a bump shows this long */
 export const BUMP_MS = 520;
+/** a bump's jolt: a squash and a stretch or two, dying away over this long */
+export const JOLT_MS = 360;
 /** a bump at least this hard squeezes the eyes shut (>.<), a softer one is a surprised o */
 export const OOF_SPEED = 7;
 /** comfy: eyes shut happily for this long, once a piece that moved comes to rest */
@@ -68,6 +70,7 @@ interface Memory {
   comfy: number;
   comfyAt: number;
   bump: number;
+  bumpAt: number;
   oof: boolean;
   /** it has moved since it last came to rest, and since when it has been still */
   moved: boolean;
@@ -119,6 +122,7 @@ export function faces() {
       comfy: 0,
       comfyAt: 0,
       bump: 0,
+      bumpAt: 0,
       oof: false,
       moved: false,
       rest: now,
@@ -150,6 +154,7 @@ export function faces() {
       if (!m) continue;
       if (now >= m.bump) counts.bump++;
       m.bump = now + BUMP_MS;
+      m.bumpAt = now;
       m.oof = b.speed >= OOF_SPEED;
       // a bump breaks a moment
       m.gaze = Math.min(m.gaze, now);
@@ -276,7 +281,12 @@ export function faces() {
       // the comfy sink: a soft dip of the face, there and back
       const t = (now - m.comfyAt) / SINK_MS;
       const settle = mood === "comfy" && !still && t < 1 ? Math.sin(Math.PI * t) : 0;
-      m.state = settle ? { blink, lx: m.lx, ly: m.ly, mood, settle } : { blink, lx: m.lx, ly: m.ly, mood };
+      // the bump's jolt: squashed at the hit, then a stretch and a smaller squash, gone
+      const j = (now - m.bumpAt) / JOLT_MS;
+      const jolt = (mood === "bump" || mood === "oof") && !still && j < 1 ? Math.cos(3 * Math.PI * j) * (1 - j) ** 2 : 0;
+      m.state = { blink, lx: m.lx, ly: m.ly, mood };
+      if (settle) m.state.settle = settle;
+      if (jolt) m.state.jolt = jolt;
       if (blink) counts.blink++;
       if (Math.abs(m.lx) + Math.abs(m.ly) > 0.05) counts.look++;
     }
