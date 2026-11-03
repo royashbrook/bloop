@@ -12,6 +12,9 @@
   import { installControl } from "./install.ts";
   import { updateControl, type UpdateCheck } from "./pwa.ts";
   import { createSound } from "./lib/sound.ts";
+  // the drawn name: chunky outlined letters and tiny bubbles growing into the two o's.
+  // shapes only, no font; a light halo under the ink keeps it reading on a dark card
+  import wordmark from "./lib/wordmark.svg?raw";
 
   const ETHOS =
     "no ads, no lives, no timers, nothing to buy, no accounts, no cookies, nothing sold or shared.";
@@ -417,7 +420,7 @@
   <dialog bind:this={dialog} class="sheet" onclose={() => (sheet = "")}>
     <div class="card">
       {#if sheet === "about"}
-        <h2>bloop</h2>
+        <h2 class="title">{@html wordmark}</h2>
         <p>drag along the jar to aim, let go to drop. two the same touch and <b>bloop</b> into the next one up.</p>
         <p>keep the jar under the dashed line. if something sits above it too long, the jar is full.</p>
         <button id="looks" onclick={() => (sheet = "looks")}>looks: {skin.name}{pending ? ` (next game: ${pending.name})` : ""}</button>

@@ -276,6 +276,17 @@ a {
   margin: 0;
   font: 800 26px var(--font-display);
 }
+/* the about sheet's title is the drawn name */
+.card .title {
+  display: flex;
+  justify-content: center;
+  padding: 2px 0 4px;
+}
+.card .title .wordmark {
+  display: block;
+  width: min(220px, 70%);
+  height: auto;
+}
 .card p {
   margin: 0;
   line-height: 1.4;
