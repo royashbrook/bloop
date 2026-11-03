@@ -99,14 +99,16 @@ test("the same seed, size and inputs replay the same game, at every size", () =>
 for (const skin of SKINS)
   test(`${skin.id} at big: the top tier is at most 60% of the jar across, and every drop is held inside the walls`, () => {
     const g = create(1, dims(skin, BIG.scale));
-    const widest = Math.max(...g.reach) * 2;
+    // how far each piece reaches sideways, worked out here from the look, not read back from the engine
+    const wide = skin.tiers.map((t) => reach(t.shape ?? "circle", t.radius * JAR.width * BIG.scale));
+    const widest = Math.max(...wide) * 2;
     assert.ok(widest <= JAR.width * 0.6 + 1e-9, `widest piece ${widest} of ${JAR.width}`);
     for (let tier = 0; tier < SPAWN_TIERS; tier++) {
       g.held = tier;
       for (const x of [-50, 0, JAR.width, JAR.width + 50]) {
         aim(g, x);
         const at = heldX(g);
-        assert.ok(at - g.reach[tier] >= 0 && at + g.reach[tier] <= JAR.width, `tier ${tier} aimed at ${x} sits at ${at}`);
+        assert.ok(at - wide[tier] >= -1e-9 && at + wide[tier] <= JAR.width + 1e-9, `tier ${tier} aimed at ${x} sits at ${at}`);
       }
     }
   });
