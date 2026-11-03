@@ -94,7 +94,8 @@ function stroke(ctx: CanvasRenderingContext2D, width: number, colour = INK) {
 }
 
 function cheeks(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, dx: number, dy: number, f: FaceState) {
-  ctx.fillStyle = f.mood === "happy" ? "rgba(255,110,135,0.5)" : "rgba(255,120,140,0.35)";
+  const rosy = f.mood === "happy" || f.mood === "hello" || f.mood === "comfy";
+  ctx.fillStyle = rosy ? "rgba(255,110,135,0.5)" : "rgba(255,120,140,0.35)";
   for (const s of [-1, 1]) {
     ctx.beginPath();
     ctx.ellipse(x + s * r * dx, y + r * dy, r * 0.12, r * 0.08, 0, 0, T);
@@ -104,7 +105,9 @@ function cheeks(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, 
 
 /**
  * two eyes at (x +- dx, y), size e. open: `open` paints one, nudged where it
- * looks. shut (a blink): a short line. squish: squeezed > <. happy: ^ ^.
+ * looks. shut (a blink): a short line. squish and oof: squeezed > <. happy: ^ ^.
+ * comfy: shut, curved down, content. bump: open wide, looking straight out,
+ * with little raised brows.
  */
 function eyes(
   ctx: CanvasRenderingContext2D,
@@ -119,7 +122,7 @@ function eyes(
   for (const s of [-1, 1]) {
     const cx = x + s * dx;
     ctx.beginPath();
-    if (f.mood === "squish") {
+    if (f.mood === "squish" || f.mood === "oof") {
       // each eye squeezed shut toward the nose
       ctx.moveTo(cx - s * e, y - e);
       ctx.lineTo(cx + s * e * 0.7, y);
@@ -128,6 +131,14 @@ function eyes(
     } else if (f.mood === "happy") {
       ctx.arc(cx, y + e * 0.55, e * 1.1, Math.PI * 1.15, Math.PI * 1.85);
       stroke(ctx, w);
+    } else if (f.mood === "comfy") {
+      ctx.arc(cx, y - e * 0.45, e * 1.05, Math.PI * 0.18, Math.PI * 0.82);
+      stroke(ctx, w);
+    } else if (f.mood === "bump") {
+      open(cx, y);
+      ctx.beginPath();
+      ctx.arc(cx, y + e * 0.4, e * 2, Math.PI * 1.35, Math.PI * 1.65);
+      stroke(ctx, w * 0.8);
     } else if (f.blink) {
       ctx.moveTo(cx - e * 1.1, y);
       ctx.lineTo(cx + e * 1.1, y);
@@ -158,7 +169,18 @@ export function blobFace(ctx: CanvasRenderingContext2D, x: number, y: number, r:
 function mouth(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, f: FaceState, dy: number, size: number) {
   const w = Math.max(0.8, r * 0.055), my = y + r * dy, m = r * size;
   ctx.beginPath();
-  if (f.mood === "happy") {
+  if (f.mood === "bump" || f.mood === "oof") {
+    // a little round o of surprise
+    ctx.ellipse(x, my + m * 0.55, m * 0.38, m * 0.48, 0, 0, T);
+    ctx.fillStyle = INK;
+    ctx.fill();
+  } else if (f.mood === "hello") {
+    // a small open smile, no tongue: saying hi
+    ctx.arc(x, my + m * 0.15, m * 0.8, 0, Math.PI);
+    ctx.closePath();
+    ctx.fillStyle = INK;
+    ctx.fill();
+  } else if (f.mood === "happy") {
     ctx.arc(x, my + m * 0.2, m * 1.05, 0, Math.PI);
     ctx.closePath();
     ctx.fillStyle = INK;
@@ -192,6 +214,13 @@ function muzzle(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, 
   ctx.fillStyle = nose;
   ctx.fill();
   const my = ny + r * nw * 0.95;
+  if (f.mood === "bump" || f.mood === "oof") {
+    ctx.beginPath();
+    ctx.ellipse(x, my + r * 0.07, r * 0.05, r * 0.065, 0, 0, T);
+    ctx.fillStyle = INK;
+    ctx.fill();
+    return;
+  }
   if (f.mood === "squish") {
     ctx.beginPath();
     ctx.moveTo(x - r * 0.13, my + r * 0.09);

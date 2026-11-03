@@ -96,6 +96,10 @@ const MOODS = [
   { blink: false, lx: -1, ly: 1, mood: "calm" },
   { blink: false, lx: 0, ly: 0, mood: "squish" },
   { blink: false, lx: 0, ly: 0, mood: "happy" },
+  { blink: false, lx: 1, ly: 0, mood: "hello" },
+  { blink: false, lx: 0, ly: 0, mood: "comfy" },
+  { blink: false, lx: 0, ly: 0, mood: "bump" },
+  { blink: false, lx: 0, ly: 0, mood: "oof" },
 ];
 
 for (const skin of SKINS)
