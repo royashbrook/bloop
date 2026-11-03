@@ -40,9 +40,23 @@ npm run dev     # vite prints the local url
 - faces come alive and stay upright: the body and its markings may roll, the
   eyes and mouth never turn. they blink every few seconds, glance at the nearest
   piece or the one about to drop, squint under a bigger piece and beam when just
-  made. it is all render-only, so it never changes a game. with reduced motion
-  on they hold still (no blink, no glance, no pop or ring), the squint and the
-  beam still show. see [faces.ts](src/lib/faces.ts).
+  made. every 2 to 5.5 s each has a little moment: it looks at a neighbour (and
+  nearly half the time the neighbour looks back, a hello), looks around, or
+  snuggles in. a piece that comes to rest after moving gets comfy, eyes shut
+  happily, and one hit by a contact that starts fast makes a face: a surprised o,
+  or a squeezed >.< when hit hard. the bumps come from a read-only ear on the
+  engine's collision events ([bumps.ts](src/lib/bumps.ts)). it is all
+  render-only, so it never changes a game. with reduced motion on they hold
+  still (no blink, no glance, no moments, no pop or ring), the squint, the beam,
+  comfy and a bump still show. see [faces.ts](src/lib/faces.ts).
+- sound, made on the spot with web audio (no files): a soft plop for a drop and
+  a bloop for every merge, each size its own. small ones are light, high and
+  quick, bigger ones lower, longer and rounder, and the biggest a deep wobbly
+  glumph with a soft pop. a new biggest and two whales vanishing sparkle, quick
+  merges step up a little, and a soft limiter with at most eight at once keeps it
+  gentle. on by default, switch it off in the about sheet (saved). it starts on
+  the first tap and goes quiet the moment the page hides. see
+  [sound.ts](src/lib/sound.ts).
 - piece size: small, medium (the default) or big, from the about sheet. one
   number scales every tier of every look, once, when a game is made, so the
   physics, the join, the drawing and the wall clamp all agree. bigger pieces fill
@@ -69,7 +83,7 @@ npm run check         # svelte-check
 npm run build         # dist/, with /version.json
 npx playwright install chromium webkit
 npm run test:browser  # phone layout, controls, merge, looks, faces, full jar, offline, updates
-npm run icons         # regenerate the install pngs from public/icon.svg
+npm run icons         # regenerate the install pngs from public/icon.svg (the bubble chain)
 ```
 
 ## license
