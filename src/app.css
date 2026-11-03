@@ -395,13 +395,21 @@ a {
   justify-content: center;
   gap: 0 4px;
 }
-.best-size {
+/* .stat .best-size: plain .best-size lost to .stat span and grew to 11px, past its column at 320 */
+.stat .best-size {
   padding: 0 4px;
   border-radius: 999px;
   background: var(--surface-sunk);
   font-size: 10px;
   font-weight: 700;
+  /* wraps between size and speed rather than spill past its column on a wider font */
+  max-width: 100%;
+  text-align: center;
+}
+.stat .best-size .nw {
   white-space: nowrap;
+  color: inherit;
+  font-size: inherit;
 }
 .over .over-settings {
   font-size: 14px;

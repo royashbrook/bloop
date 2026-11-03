@@ -423,7 +423,7 @@
     <button id="about" class="icon" aria-label="about bloop" onclick={() => (sheet = "about")}>☰</button>
     <div class="stat" id="score"><span>score</span><b>{score}</b></div>
     <div class="stat" id="best">
-      <span class="best-label">best <span id="best-size" class="best-size" aria-label={settingsLine(size, speed)}>{sizeLabel(size)} · {speedLabel(speed)}×</span></span>
+      <span class="best-label">best <span id="best-size" class="best-size" aria-label={settingsLine(size, speed)}><span class="nw">{sizeLabel(size)} ·</span> <span class="nw">{speedLabel(speed)}×</span></span></span>
       <b>{best}{#if bestJiggled}<svg class="shake-mark" viewBox="0 0 24 24" role="img" aria-label="made with jiggle on"><title>made with jiggle on</title><rect x="8" y="4" width="8" height="16" rx="2" /><path d="M4.5 8q-2 4 0 8M19.5 8q2 4 0 8" /></svg>{/if}</b>
     </div>
     <div class="next" id="next" aria-label={`next: ${tiers[next].name}`}><canvas bind:this={nextEl}></canvas></div>
