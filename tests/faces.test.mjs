@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import Matter from "matter-js";
 import { aim, create, drop, JAR, place, snapshot, step } from "../src/lib/engine/game.ts";
 import { rng } from "../src/lib/engine/rng.ts";
-import { BLINK_MS, faces, HAPPY_STEPS } from "../src/lib/faces.ts";
+import { BLINK_MS, COMFY_MS, faces, HAPPY_STEPS, JOLT_MS, SETTLE_MS } from "../src/lib/faces.ts";
 import { cells } from "../src/lib/skins/cells.ts";
 import { dims } from "../src/lib/skins/types.ts";
 
@@ -152,4 +152,246 @@ test("reduced motion: no blinking and no glancing, the moods still show", () => 
   pin(h, place(h, 6, 200, JAR.height - 2 * r(1) - r(6) + 0.5));
   f.update(h, 0, true);
   assert.equal(byId(f.report(h), small).mood, "squish");
+});
+
+// the moments (#17): a hello, getting comfy, and a bump
+
+/** step the game and the faces together, frame by frame; collect each piece's moods in order */
+function play(f, g, from, ms) {
+  const moods = new Map();
+  for (let t = from; t < from + ms; t += FRAME) {
+    step(g);
+    f.update(g, t, false);
+    for (const p of f.report(g).list) {
+      const seen = moods.get(p.id) ?? [];
+      if (seen.at(-1) !== p.mood) seen.push(p.mood);
+      moods.set(p.id, seen);
+    }
+  }
+  return moods;
+}
+/** a piece pinned on the floor, and one dropped onto it from a height (edge to edge) */
+function fall(height, seed = 1) {
+  const g = create(seed, DIMS);
+  aim(g, 20); // the held piece waits off to the side
+  const floor = place(g, 3, 250, JAR.height - r(3));
+  pin(g, floor);
+  const f = faces();
+  f.update(g, 0, false);
+  const faller = place(g, 1, 250, JAR.height - 2 * r(3) - r(1) - height);
+  return { g, f, floor, faller };
+}
+
+test("a piece hit by a fast faller makes a face: a soft hit a surprised o, a hard one >.<", () => {
+  const soft = fall(30);
+  const s = play(soft.f, soft.g, FRAME, 2000);
+  assert.ok(s.get(soft.floor).includes("bump"), `soft: ${s.get(soft.floor)}`);
+  assert.ok(!s.get(soft.floor).includes("oof"), `soft: ${s.get(soft.floor)}`);
+  const hard = fall(300);
+  const h = play(hard.f, hard.g, FRAME, 2000);
+  assert.ok(h.get(hard.floor).includes("oof"), `hard: ${h.get(hard.floor)}`);
+  // the faller felt it too
+  assert.ok(h.get(hard.faller).includes("oof"), `faller: ${h.get(hard.faller)}`);
+  assert.equal(hard.f.report(hard.g).counts.bump, 2);
+});
+
+test("a piece that comes to rest against another, or is set down touching, makes no bump face", () => {
+  // set down a hair apart: they meet, slowly
+  const g = create(2, DIMS);
+  aim(g, 20);
+  const low = place(g, 3, 250, JAR.height - r(3));
+  const top = place(g, 1, 250, JAR.height - 2 * r(3) - r(1) - 0.5);
+  const side = place(g, 2, 250 + r(3) + r(2) + 0.5, JAR.height - r(2));
+  const f = faces();
+  f.update(g, 0, false);
+  const seen = play(f, g, FRAME, 3000);
+  for (const id of [low, top, side]) {
+    assert.ok(!seen.get(id).includes("bump") && !seen.get(id).includes("oof"), `piece ${id}: ${seen.get(id)}`);
+  }
+  assert.equal(f.report(g).counts.bump, 0);
+});
+
+test("a piece that moved gets comfy once it comes to rest, and not before", () => {
+  // set down from a little way up: it moves, but lands too softly for a bump
+  const { g, f, faller } = fall(8);
+  const me = g.live.find((p) => p.id === faller);
+  let movedLast = -1, comfyFirst = -1, still = 0, done = false;
+  for (let t = FRAME; t < 4000; t += FRAME) {
+    step(g);
+    f.update(g, t, false);
+    const speed = Math.hypot(me.body.velocity.x, me.body.velocity.y);
+    if (speed > 0.15 && comfyFirst < 0) movedLast = t;
+    const mood = byId(f.report(g), faller).mood;
+    if (mood === "comfy" && comfyFirst < 0) comfyFirst = t;
+    // the first stretch of comfy (a snuggle may come later, on its own)
+    if (mood === "comfy" && !done) still++;
+    else if (comfyFirst > 0) done = true;
+  }
+  assert.equal(f.report(g).counts.bump, 0);
+  assert.ok(comfyFirst > 0, "it got comfy");
+  // only once it had been still for a beat
+  assert.ok(movedLast > 0 && comfyFirst - movedLast >= SETTLE_MS - FRAME, `comfy at ${comfyFirst}, last moved ${movedLast}`);
+  assert.ok(Math.abs(still * FRAME - COMFY_MS) <= 2 * FRAME, `comfy for ${still * FRAME} ms`);
+});
+
+test("a piece that never moved never gets comfy from settling", () => {
+  const { g } = pair();
+  const f = faces();
+  const seen = watch(f, g, 0, 20000);
+  for (const [id, s] of seen) assert.ok(!s.moods.has("comfy"), `piece ${id} got comfy`);
+  assert.equal(f.report(g).counts.comfy, 0);
+});
+
+/** two pinned pieces side by side, a hair apart */
+function neighbours(seed = 1) {
+  const g = create(seed, DIMS);
+  g.over = true;
+  const a = place(g, 3, 150, JAR.height - r(3));
+  const b = place(g, 3, 150 + 2 * r(3) + 4, JAR.height - r(3));
+  pin(g, a);
+  pin(g, b);
+  return { g, a, b };
+}
+
+test("neighbours look at each other, often both at once: a hello", () => {
+  const { g, a, b } = neighbours();
+  const f = faces();
+  let both = 0, one = 0;
+  const MIN = 3;
+  for (let t = 0; t < MIN * 60000; t += FRAME) {
+    f.update(g, t, false);
+    const rep = f.report(g);
+    const A = byId(rep, a), B = byId(rep, b);
+    if (A.mood === "hello" || B.mood === "hello") {
+      // a hello is always mutual: both say it, each looking at the other
+      assert.equal(A.mood, B.mood, `at ${t}`);
+      assert.equal(A.with, b);
+      assert.equal(B.with, a);
+      both++;
+    } else if (A.with || B.with) one++;
+  }
+  const { counts } = f.report(g);
+  const perMinute = counts.hello / MIN;
+  // a moment every 2 to 5.5 s each, about two thirds a look at the neighbour, nearly half looked back
+  assert.ok(perMinute >= 5 && perMinute <= 14, `${perMinute} hellos a minute`);
+  assert.ok(counts.glance >= counts.hello * 1.5, `glances ${counts.glance}, hellos ${counts.hello}`);
+  assert.ok(both > 0 && one > 0);
+  // the eyes really meet: by the end of a hello the left looks right and the right looks left
+  const f2 = faces();
+  let met = false;
+  for (let t = 0; t < 60000 && !met; t += FRAME) {
+    f2.update(g, t, false);
+    const rep = f2.report(g);
+    const A = byId(rep, a), B = byId(rep, b);
+    if (A.mood === "hello" && A.lx > 0.8 && B.lx < -0.8) met = true;
+  }
+  assert.ok(met, "their eyes met");
+});
+
+test("pieces far apart never say hello; the moments are seeded by piece id", () => {
+  const { g } = pair();
+  const f = faces();
+  watch(f, g, 0, 60000);
+  const { counts } = f.report(g);
+  assert.equal(counts.hello, 0);
+  assert.equal(counts.glance, 0);
+  assert.ok(counts.around > 5, `looked around ${counts.around} times`);
+  const trace = (seed) => {
+    const { g } = neighbours(seed);
+    const f = faces();
+    const out = [];
+    for (let t = 0; t < 30000; t += FRAME) {
+      f.update(g, t, false);
+      out.push(f.report(g).list.map((p) => `${p.mood}${p.with}`).join());
+    }
+    return out;
+  };
+  assert.deepEqual(trace(1), trace(8));
+});
+
+test("reduced motion: no glance, no hello, no look around; a bump and comfy still show, still", () => {
+  const { g } = neighbours();
+  const f = faces();
+  watch(f, g, 0, 30000, true);
+  const { counts } = f.report(g);
+  assert.deepEqual([counts.glance, counts.hello, counts.around, counts.snuggle, counts.look], [0, 0, 0, 0, 0]);
+  const hard = fall(300);
+  const moods = new Map();
+  for (let t = FRAME; t < 4000; t += FRAME) {
+    step(hard.g);
+    hard.f.update(hard.g, t, true);
+    for (const p of hard.f.report(hard.g).list) (moods.get(p.id) ?? moods.set(p.id, new Set()).get(p.id)).add(p.mood);
+    for (const p of hard.g.live) assert.equal(hard.f.get(p.id).settle ?? 0, 0);
+  }
+  assert.ok(moods.get(hard.floor).has("oof"));
+  assert.ok(moods.get(hard.faller).has("comfy"));
+});
+
+test("a moment never moves a blink: close neighbours blink just as far-apart ones do", () => {
+  const blinks = ({ g }) => {
+    const f = faces();
+    const out = [];
+    for (let t = 0; t < 20000; t += FRAME) {
+      f.update(g, t, false);
+      out.push(f.report(g).list.map((p) => p.blink).join());
+    }
+    return { out, counts: f.report(g).counts };
+  };
+  const near = blinks(neighbours()), far = blinks(pair());
+  const { glance, around, snuggle } = near.counts;
+  assert.ok(glance > 0 && glance + around + snuggle > 5, JSON.stringify(near.counts));
+  assert.deepEqual(near.out, far.out);
+});
+
+test("a bump jolts: squashed at the hit, a stretch, then gone well before the bump face ends", () => {
+  const hard = fall(300);
+  const trail = [];
+  for (let t = FRAME; t < 2000; t += FRAME) {
+    step(hard.g);
+    hard.f.update(hard.g, t, false);
+    const s = hard.f.get(hard.floor);
+    trail.push({ t, mood: s.mood, jolt: s.jolt ?? 0 });
+  }
+  const hit = trail.findIndex((x) => x.mood === "oof");
+  assert.ok(hit >= 0, "it was hit");
+  const during = trail.slice(hit).filter((x) => x.t - trail[hit].t < JOLT_MS);
+  // squashed hard at the hit, stretched a little after
+  assert.ok(during[0].jolt > 0.9, `at the hit ${during[0].jolt}`);
+  assert.ok(during.some((x) => x.jolt < -0.2), `a stretch: ${during.map((x) => x.jolt.toFixed(2))}`);
+  // gone once the jolt is over, while the face still says oof
+  const after = trail.slice(hit).filter((x) => x.t - trail[hit].t >= JOLT_MS && x.mood === "oof");
+  assert.ok(after.length > 0 && after.every((x) => x.jolt === 0), "still oof, no jolt");
+  // and never outside a bump
+  assert.ok(trail.every((x) => x.jolt === 0 || x.mood === "bump" || x.mood === "oof"));
+});
+
+test("reduced motion: a bump shows, it does not jolt", () => {
+  const hard = fall(300);
+  let oof = 0;
+  for (let t = FRAME; t < 2000; t += FRAME) {
+    step(hard.g);
+    hard.f.update(hard.g, t, true);
+    for (const p of hard.g.live) {
+      const s = hard.f.get(p.id);
+      if (s.mood === "oof") oof++;
+      assert.equal(s.jolt ?? 0, 0);
+    }
+  }
+  assert.ok(oof > 0);
+});
+
+test("at speed 2, two steps a frame: a hit still makes a face on both, and the faller still gets comfy", () => {
+  for (const per of [2, 3]) {
+    const hard = fall(300);
+    const moods = new Map();
+    for (let t = FRAME; t < 4000; t += FRAME) {
+      for (let i = 0; i < per; i++) step(hard.g);
+      hard.f.update(hard.g, t, false);
+      for (const p of hard.f.report(hard.g).list) (moods.get(p.id) ?? moods.set(p.id, new Set()).get(p.id)).add(p.mood);
+    }
+    assert.ok(moods.get(hard.floor).has("oof"), `${per} a frame, floor: ${[...moods.get(hard.floor)]}`);
+    assert.ok(moods.get(hard.faller).has("oof"), `${per} a frame, faller: ${[...moods.get(hard.faller)]}`);
+    assert.ok(moods.get(hard.faller).has("comfy"), `${per} a frame, faller: ${[...moods.get(hard.faller)]}`);
+    assert.equal(hard.f.report(hard.g).counts.bump, 2);
+  }
 });

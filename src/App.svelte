@@ -4,13 +4,20 @@
   import { askMotion, shaker } from "./lib/shake.ts";
   import { icon, preview, render, theme, VIEW, MARGIN, BURST_LIFE, type Burst, type Theme } from "./lib/draw.ts";
   import { faces as makeFaces } from "./lib/faces.ts";
+  import { smoother } from "./lib/smooth.ts";
   import { SKINS, skinById } from "./lib/skins/index.ts";
   import { dims, type Skin } from "./lib/skins/types.ts";
   import { readSlot, writeSlot } from "./lib/storage.ts";
-  import { SIZES, sizeById, type Size } from "./lib/sizes.ts";
-  import { parseBests, type Bests } from "./lib/best.ts";
+  import { readSize, sizeLabel, sizeWord, snapSize, SIZE_MAX, SIZE_MIN, SIZE_STEP } from "./lib/sizes.ts";
+  import { readSpeed, snapSpeed, speedLabel, speedWord, SPEED_MAX, SPEED_MIN, SPEED_STEP } from "./lib/speeds.ts";
+  import { bestAt, parseBests, withBest, type Bests } from "./lib/best.ts";
+  import { sample } from "./lib/sample.ts";
   import { installControl } from "./install.ts";
   import { updateControl, type UpdateCheck } from "./pwa.ts";
+  import { createSound } from "./lib/sound.ts";
+  // the drawn name: chunky outlined letters and tiny bubbles growing into the two o's.
+  // shapes only, no font; a light halo under the ink keeps it reading on a dark card
+  import wordmark from "./lib/wordmark.svg?raw";
 
   const ETHOS =
     "no ads, no lives, no timers, nothing to buy, no accounts, no cookies, nothing sold or shared.";
@@ -23,25 +30,38 @@
   let pending = $state.raw<Skin | null>(null);
   const tiers = $derived(skin.tiers);
   const faces = makeFaces();
-  // the piece size: one number for every look. like a look, a change mid-game
-  // waits for the next game, and the pick is saved.
+  // pieces drawn between their last two steps, so a speed like 1.25 moves smoothly
+  const smooth = smoother();
+  // the piece size and the speed: a number each, off a slider, for every look.
+  // like a look, a change mid-game waits for the next game, and the pick is saved.
+  // an old size name (small, medium, big) reads as the size it was.
   const SIZE = "bloop:size";
-  const firstSize = sizeById(readSlot(SIZE));
-  let size = $state.raw<Size>(firstSize);
-  let pendingSize = $state.raw<Size | null>(null);
+  const SPEED = "bloop:speed";
+  const firstSize = readSize(readSlot(SIZE));
+  const firstSpeed = readSpeed(readSlot(SPEED));
+  let size = $state(firstSize);
+  let pendingSize = $state<number | null>(null);
+  let speed = $state(firstSpeed);
+  let pendingSpeed = $state<number | null>(null);
+  // where the sliders sit while a finger is on them: the picture follows at once,
+  // the pick is made when the finger lets go
+  let sizeDrag = $state(firstSize);
+  let speedDrag = $state(firstSpeed);
 
   // ?seed=123 plays that exact deal every game, so a run can be shared and replayed
   const q = new URLSearchParams(location.search);
   const fixedSeed = /^\d{1,9}$/.test(q.get("seed") ?? "") ? Number(q.get("seed")) : null;
   const freshSeed = () => fixedSeed ?? crypto.getRandomValues(new Uint32Array(1))[0];
 
-  // a best per piece size, each with whether jiggle was on for it, all one record
-  // written in one go, so a failed write can never keep a score and lose its mark.
-  // an older save (a plain number, or one { score, jiggled }) was played at scale 1.
+  // a best per size and speed, each with whether jiggle was on for it, all one
+  // record written in one go, so a failed write can never keep a score and lose
+  // its mark. older saves move to the settings they were played at (best.ts).
   const BEST = "bloop:best";
   let bests = $state.raw<Bests>(parseBests(readSlot(BEST), () => readSlot("bloop:best-jiggled") === "1"));
-  const best = $derived(bests[size.id].score);
-  const bestJiggled = $derived(bests[size.id].jiggled);
+  const best = $derived(bestAt(bests, size, speed).score);
+  const bestJiggled = $derived(bestAt(bests, size, speed).jiggled);
+  /** how a size and speed read, short, in the hud, the card and the about sheet */
+  const settingsLine = (z: number, v: number) => `size ${sizeLabel(z)} · speed ${speedLabel(v)}`;
   let saved = $state(true);
   // jiggle: off by default, a fun extra. a run played with it on is marked, and
   // so is a best made in one, so everyone can see it was jiggled.
@@ -50,8 +70,18 @@
   let jiggleOn = $state(jiggleSaved);
   let jiggleNote = $state("");
   let jiggled = $state(jiggleSaved);
+  // sound: on unless someone turned it off. it starts on the first tap or key
+  const SOUND = "bloop:sound";
+  const soundSaved = readSlot(SOUND) !== "off";
+  let soundOn = $state(soundSaved);
+  const sfx = createSound(soundSaved);
+  function toggleSound() {
+    soundOn = !soundOn;
+    writeSlot(SOUND, soundOn ? "on" : "off");
+    sfx.setSound(soundOn);
+  }
 
-  let game: Game = create(freshSeed(), dims(firstSkin, firstSize.scale));
+  let game: Game = create(freshSeed(), dims(firstSkin, firstSize), firstSpeed);
   // the sizes this game was made with, for the preview
   let radii = $state.raw(game.radii);
   if (jiggleSaved) markJiggle(game);
@@ -62,7 +92,7 @@
   let next = $state(game.next);
   let flair = $state("");
   let flairKey = $state(0);
-  let sheet = $state<"" | "about" | "ios" | "restart" | "looks" | "size">("");
+  let sheet = $state<"" | "about" | "ios" | "restart" | "looks" | "settings">("");
 
   let jarEl = $state<HTMLCanvasElement>();
   let nextEl = $state<HTMLCanvasElement>();
@@ -76,16 +106,19 @@
   (window as unknown as { __bloop: unknown }).__bloop = {
     state: () => snapshot(game),
     look: () => ({ now: skin.id, next: pending?.id ?? null }),
-    size: () => ({ now: size.id, next: pendingSize?.id ?? null }),
+    size: () => ({ now: size, next: pendingSize }),
+    speed: () => ({ now: speed, next: pendingSpeed }),
     faces: () => faces.report(game),
+    sound: () => sfx.report(),
+    drawn: () => smooth.report(),
   };
 
   function sync() {
     if (score !== game.score) {
       score = game.score;
       if (score > best) {
-        // this game was made at the size on screen: sizes change only between games
-        bests = { ...bests, [size.id]: { score, jiggled: game.jiggled } };
+        // this game was made at the size and speed on screen: they change only between games
+        bests = withBest(bests, size, speed, { score, jiggled: game.jiggled });
         saved = writeSlot(BEST, JSON.stringify(bests));
       }
     }
@@ -123,11 +156,15 @@
       skin = pending;
       pending = null;
     }
-    if (pendingSize) {
+    if (pendingSize !== null) {
       size = pendingSize;
       pendingSize = null;
     }
-    game = create(freshSeed(), dims(skin, size.scale));
+    if (pendingSpeed !== null) {
+      speed = pendingSpeed;
+      pendingSpeed = null;
+    }
+    game = create(freshSeed(), dims(skin, size), speed);
     radii = game.radii;
     if (jiggleOn) markJiggle(game);
     faces.reset();
@@ -148,18 +185,44 @@
   }
 
   /** pick a piece size: now if the jar is empty or finished, otherwise with the next game */
-  function pickSize(s: Size) {
-    writeSlot(SIZE, s.id);
+  function pickSize(v: number) {
+    const s = snapSize(v);
+    sizeDrag = s;
+    writeSlot(SIZE, sizeLabel(s));
     if (game.drops === 0 || game.over) {
       size = s;
       pendingSize = null;
       restart();
     } else pendingSize = s === size ? null : s;
   }
-  // the size picker's pictures: a few pieces drawn true to each other and to the
-  // biggest size, so big pieces look big
-  const biggestScale = Math.max(...SIZES.map((s) => s.scale));
-  const sizeFill = (tier: number, s: Size) => (0.42 * skin.tiers[tier].radius * s.scale) / (skin.tiers[4].radius * biggestScale);
+
+  /** pick a speed: now if the jar is empty or finished, otherwise with the next game */
+  function pickSpeed(v: number) {
+    const s = snapSpeed(v);
+    speedDrag = s;
+    writeSlot(SPEED, speedLabel(s));
+    if (game.drops === 0 || game.over) {
+      speed = s;
+      pendingSpeed = null;
+      restart();
+    } else pendingSpeed = s === speed ? null : s;
+  }
+
+  function openSettings() {
+    sizeDrag = pendingSize ?? size;
+    speedDrag = pendingSpeed ?? speed;
+    sheet = "settings";
+  }
+  // the size slider's picture, redrawn as the slider moves
+  let sampleEl = $state<HTMLCanvasElement>();
+  $effect(() => {
+    if (!sampleEl) return;
+    const dpr = Math.min(3, window.devicePixelRatio || 1);
+    const box = sampleEl.getBoundingClientRect();
+    sampleEl.width = Math.round(box.width * dpr);
+    sampleEl.height = Math.round(box.height * dpr);
+    sample(sampleEl.getContext("2d")!, skin, sizeDrag);
+  });
 
   // the canvas fills the space it is given, at the screen's real pixel density
   let look: Theme;
@@ -201,19 +264,31 @@
     const dt = last ? (now - last) / 1000 : 0;
     last = now;
     if (!game.over && !sheet && !document.hidden) {
-      for (const m of advance(game, dt)) celebrate(m, now);
+      const made = advance(game, dt);
+      for (const m of made) celebrate(m, now);
+      sfx.merges(made.map((m) => ({ ...m, big: m.tier >= SPAWN_TIERS })));
       sync();
     }
     bursts = bursts.filter((b) => now - b.at < BURST_LIFE);
     const ctx = jarEl?.getContext("2d");
-    if (ctx && look) render(ctx, game, skin, look, scale, bursts, now, faces, still?.matches ?? false);
+    if (ctx && look) render(ctx, game, skin, look, scale, bursts, now, faces, still?.matches ?? false, smooth);
     raf = requestAnimationFrame(frame);
   }
   let visible = $state(true);
   const visibility = () => {
     last = 0;
     visible = !document.hidden;
+    if (document.hidden) sfx.quiet();
+    else sfx.resume();
   };
+  // a departing page goes quiet at that moment; a page back from the cache picks up
+  const pagehide = () => sfx.quiet();
+  const pageshow = () => sfx.resume();
+  /** drop the held piece, with a plop */
+  function dropHeld() {
+    const tier = game.held;
+    if (drop(game)) sfx.drop(tier);
+  }
 
   // turning jiggle on is the tap iOS needs to ask for motion; no answer, no jiggle
   async function toggleJiggle() {
@@ -267,13 +342,14 @@
     pointer = null;
     if (!playable()) return;
     aimAt(e.clientX);
-    drop(game);
+    dropHeld();
   }
   function cancel(e: PointerEvent) {
     if (e.pointerId === pointer) pointer = null;
   }
 
   function key(e: KeyboardEvent) {
+    sfx.wake();
     if (sheet || game.over) return;
     // space and enter belong to a focused button; the button does its own job
     if ((e.key === " " || e.key === "Enter") && (e.target as Element | null)?.closest?.("button, a, input, select, textarea")) return;
@@ -282,7 +358,7 @@
       aim(game, heldX(game) + (e.key === "ArrowLeft" ? -1 : 1) * JAR.width * 0.04);
     } else if (e.key === " " || e.key === "Enter") {
       e.preventDefault();
-      drop(game);
+      dropHeld();
     }
   }
 
@@ -314,6 +390,8 @@
     updates = updateControl(() => (updateReady = true));
     addEventListener("keydown", key);
     document.addEventListener("visibilitychange", visibility);
+    addEventListener("pagehide", pagehide);
+    addEventListener("pageshow", pageshow);
     still = matchMedia("(prefers-reduced-motion: reduce)");
     dark = matchMedia("(prefers-color-scheme: dark)");
     dark.addEventListener("change", repaint);
@@ -329,20 +407,23 @@
     observer?.disconnect();
     dark?.removeEventListener("change", repaint);
     cancelAnimationFrame(raf);
+    smooth.stop();
     clearTimeout(flairTimer);
     if (typeof removeEventListener === "function") {
       removeEventListener("keydown", key);
       document.removeEventListener("visibilitychange", visibility);
+      removeEventListener("pagehide", pagehide);
+      removeEventListener("pageshow", pageshow);
     }
   });
 </script>
 
-<main class="play">
+<main class="play" onpointerdowncapture={sfx.wake} onpointerupcapture={sfx.wake}>
   <header class="hud">
     <button id="about" class="icon" aria-label="about bloop" onclick={() => (sheet = "about")}>☰</button>
     <div class="stat" id="score"><span>score</span><b>{score}</b></div>
     <div class="stat" id="best">
-      <span>best <span id="best-size" class="best-size">{size.id}</span></span>
+      <span class="best-label">best <span id="best-size" class="best-size" aria-label={settingsLine(size, speed)}><span class="nw">{sizeLabel(size)} ·</span> <span class="nw">{speedLabel(speed)}×</span></span></span>
       <b>{best}{#if bestJiggled}<svg class="shake-mark" viewBox="0 0 24 24" role="img" aria-label="made with jiggle on"><title>made with jiggle on</title><rect x="8" y="4" width="8" height="16" rx="2" /><path d="M4.5 8q-2 4 0 8M19.5 8q2 4 0 8" /></svg>{/if}</b>
     </div>
     <div class="next" id="next" aria-label={`next: ${tiers[next].name}`}><canvas bind:this={nextEl}></canvas></div>
@@ -367,11 +448,12 @@
         <h2>jar's full!</h2>
         <p>score <b>{score}</b></p>
         <p>best <b>{best}</b></p>
+        <p class="over-settings" id="over-settings-line">{settingsLine(size, speed)}</p>
         {#if jiggled}<p class="jiggled"><svg class="shake-mark" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="4" width="8" height="16" rx="2" /><path d="M4.5 8q-2 4 0 8M19.5 8q2 4 0 8" /></svg>jiggle on</p>{/if}
         <button id="again" class="big" onclick={restart}>play again</button>
         <div class="row">
           <button id="over-looks" onclick={() => (sheet = "looks")}>looks</button>
-          <button id="over-size" onclick={() => (sheet = "size")}>size</button>
+          <button id="over-settings" onclick={openSettings}>size & speed</button>
         </div>
       </div>
     {/if}
@@ -388,11 +470,12 @@
   <dialog bind:this={dialog} class="sheet" onclose={() => (sheet = "")}>
     <div class="card">
       {#if sheet === "about"}
-        <h2>bloop</h2>
+        <h2 class="title">{@html wordmark}</h2>
         <p>drag along the jar to aim, let go to drop. two the same touch and <b>bloop</b> into the next one up.</p>
         <p>keep the jar under the dashed line. if something sits above it too long, the jar is full.</p>
         <button id="looks" onclick={() => (sheet = "looks")}>looks: {skin.name}{pending ? ` (next game: ${pending.name})` : ""}</button>
-        <button id="size" onclick={() => (sheet = "size")}>pieces: {size.id}{pendingSize ? ` (next game: ${pendingSize.id})` : ""}</button>
+        <button id="settings" onclick={openSettings}>{settingsLine(size, speed)}{pendingSize !== null || pendingSpeed !== null ? ` (next game: ${settingsLine(pendingSize ?? size, pendingSpeed ?? speed)})` : ""}</button>
+        <button id="sound" role="switch" aria-checked={soundOn} onclick={toggleSound}>sound: {soundOn ? "on" : "off"}</button>
         <button id="jiggle" role="switch" aria-checked={jiggleOn} onclick={toggleJiggle}>jiggle: {jiggleOn ? "on" : "off"}</button>
         <p class="hint">shake your phone to jiggle the jar. a score made with jiggle on gets a little mark.</p>
         {#if jiggleNote}<p class="jiggle-note" role="status">{jiggleNote}</p>{/if}
@@ -439,31 +522,43 @@
           {/each}
         </ul>
         {#if pending}<p class="look-note" role="status">{pending.name} starts with your next game. this jar keeps going.</p>{/if}
-      {:else if sheet === "size"}
-        <h2>piece size</h2>
-        <p class="hint">bigger pieces fill the jar faster, so big is harder. each size keeps its own best.</p>
-        <ul class="looks">
-          {#each SIZES as s (s.id)}
-            <li>
-              <button
-                id={`size-${s.id}`}
-                class="look"
-                class:now={s === size}
-                class:next={s === pendingSize}
-                aria-pressed={(pendingSize ?? size) === s}
-                onclick={() => pickSize(s)}
-              >
-                <span class="look-name">{s.id} pieces</span>
-                <span class="look-pieces" aria-hidden="true">
-                  {#each [0, 2, 4] as i (i)}<canvas class="size-piece" use:tierIcon={[skin, i, 40, sizeFill(i, s)]}></canvas>{/each}
-                </span>
-                <span class="size-hint">{s.hint}</span>
-                {#if s === pendingSize}<span class="look-tag">next game</span>{:else if s === size && !pendingSize}<span class="look-tag">on</span>{:else if s === size}<span class="look-tag">this game</span>{/if}
-              </button>
-            </li>
-          {/each}
-        </ul>
-        {#if pendingSize}<p class="look-note" role="status">{pendingSize.id} pieces start with your next game. this jar keeps going.</p>{/if}
+      {:else if sheet === "settings"}
+        <h2>size & speed</h2>
+        <div class="setting">
+          <label for="size-slider">piece size</label>
+          <output id="size-value" for="size-slider">{sizeWord(sizeDrag)} · {sizeLabel(sizeDrag)}</output>
+          <input
+            id="size-slider"
+            type="range"
+            min={SIZE_MIN}
+            max={SIZE_MAX}
+            step={SIZE_STEP}
+            value={sizeDrag}
+            aria-valuetext={`${sizeLabel(sizeDrag)}, ${sizeWord(sizeDrag)}`}
+            oninput={(e) => (sizeDrag = snapSize(Number(e.currentTarget.value)))}
+            onchange={(e) => pickSize(Number(e.currentTarget.value))}
+          />
+          <canvas id="size-preview" class="size-preview" bind:this={sampleEl} aria-hidden="true"></canvas>
+          {#if pendingSize !== null}<span class="look-tag" id="size-tag">next game</span>{/if}
+        </div>
+        <div class="setting">
+          <label for="speed-slider">speed</label>
+          <output id="speed-value" for="speed-slider">{speedWord(speedDrag)} · {speedLabel(speedDrag)}×</output>
+          <input
+            id="speed-slider"
+            type="range"
+            min={SPEED_MIN}
+            max={SPEED_MAX}
+            step={SPEED_STEP}
+            value={speedDrag}
+            aria-valuetext={`${speedLabel(speedDrag)} times, ${speedWord(speedDrag)}`}
+            oninput={(e) => (speedDrag = snapSpeed(Number(e.currentTarget.value)))}
+            onchange={(e) => pickSpeed(Number(e.currentTarget.value))}
+          />
+          {#if pendingSpeed !== null}<span class="look-tag" id="speed-tag">next game</span>{/if}
+        </div>
+        <p class="hint">bigger pieces fill the jar faster, so bigger is harder. every size and speed keeps its own best.</p>
+        {#if pendingSize !== null || pendingSpeed !== null}<p class="look-note" role="status">{settingsLine(pendingSize ?? size, pendingSpeed ?? speed)} starts with your next game. this jar keeps going.</p>{/if}
       {:else if sheet === "restart"}
         <h2>start over?</h2>
         <p>this jar goes away. your best score stays.</p>

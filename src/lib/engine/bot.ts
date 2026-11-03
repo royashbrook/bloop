@@ -13,8 +13,8 @@ export interface BotRun {
   made: number;
 }
 
-export function randomBot(seed: number, dims: Dims, maxSteps = 60 * 60 * 20): BotRun {
-  const g = create(seed, dims);
+export function randomBot(seed: number, dims: Dims, speed = 1, maxSteps = 60 * 60 * 20): BotRun {
+  const g = create(seed, dims, speed);
   const hand = rng(seed ^ 0x9e3779b9);
   aim(g, hand() * JAR.width);
   while (!g.over && g.steps < maxSteps) {

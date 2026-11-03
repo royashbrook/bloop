@@ -17,8 +17,20 @@ export interface FaceState {
   /** where the eyes look, each -1..1 (0, 0 is straight ahead) */
   lx: number;
   ly: number;
-  /** squish: something heavy is on it. happy: it was just made. */
-  mood: "calm" | "squish" | "happy";
+  /**
+   * squish: something heavy is on it. happy: it was just made. hello: it and a
+   * neighbour look at each other. comfy: eyes shut happily, settling in. bump:
+   * just hit, a surprised o. oof: hit hard, eyes squeezed shut.
+   */
+  mood: "calm" | "squish" | "happy" | "hello" | "comfy" | "bump" | "oof";
+  /** 0..1, the face sinking in a little as it gets comfy (left out: 0) */
+  settle?: number;
+  /**
+   * -1..1, a bump's jolt dying away: above 0 squashed, below 0 stretched (left
+   * out: 0). none with reduced motion. a look with no eyes (numbers) shows a
+   * bump with this; the faces with eyes show it in the eyes and mouth instead.
+   */
+  jolt?: number;
 }
 export const CALM: FaceState = { blink: false, lx: 0, ly: 0, mood: "calm" };
 

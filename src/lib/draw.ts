@@ -2,15 +2,16 @@
 import { heldX, JAR, type Game } from "./engine/game.ts";
 import { extent } from "./engine/shapes.ts";
 import type { Faces } from "./faces.ts";
+import { share, type Smoother } from "./smooth.ts";
 import { CALM, type FaceState, type Skin } from "./skins/types.ts";
 
 /** space around the jar for its walls, in world units */
 export const MARGIN = 10;
 /**
  * room above the rim, in world units, so the biggest piece the biggest size can
- * drop is drawn whole while it waits (it reaches about 8 units over the rim)
+ * drop is drawn whole while it waits (at size 3 it reaches about 32 units over the rim)
  */
-export const HEADROOM = 10;
+export const HEADROOM = 34;
 export const VIEW = { width: JAR.width + MARGIN * 2, height: HEADROOM + JAR.height + MARGIN };
 
 export interface Theme {
@@ -65,6 +66,12 @@ export function piece(
   ctx.save();
   ctx.translate(x + (f.x ?? 0) * r * scale, y + (f.y ?? 0) * r * scale);
   if (scale !== 1) ctx.scale(scale, scale);
+  // getting comfy: the face sinks in a touch and spreads, then comes back
+  const sink = face.settle ?? 0;
+  if (sink) {
+    ctx.translate(0, r * 0.05 * sink);
+    ctx.scale(1 + 0.06 * sink, 1 - 0.06 * sink);
+  }
   const m = ctx.getTransform();
   skin.face(ctx, 0, 0, r * (f.s ?? 1), face, t);
   ctx.restore();
@@ -84,6 +91,8 @@ export function render(
   faces: Faces,
   /** prefers-reduced-motion: no pop, no ring (the faces handle their own) */
   still = false,
+  /** draw each piece between its last two steps (smooth.ts); left out: where it is */
+  smooth?: Smoother,
 ) {
   const c = ctx.canvas;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -131,10 +140,13 @@ export function render(
   }
 
   faces.update(g, now, still);
+  smooth?.frame(g);
+  const alpha = share(g);
   for (const p of g.live) {
     const age = g.steps - p.born;
     const pop = !still && p.made && age < POP_STEPS ? 0.75 + 0.25 * easeOutBack(age / POP_STEPS) : 1;
-    faces.drew(p.id, piece(ctx, skin, p.tier, p.body.position.x, p.body.position.y, p.r, p.body.angle, faces.get(p.id), pop));
+    const at = smooth ? smooth.pose(p, alpha) : { x: p.body.position.x, y: p.body.position.y, angle: p.body.angle };
+    faces.drew(p.id, piece(ctx, skin, p.tier, at.x, at.y, p.r, at.angle, faces.get(p.id), pop));
   }
 
   if (!still) for (const b of bursts) {
