@@ -6,6 +6,8 @@ nothing to buy, no accounts, no cookies, nothing sold or shared.** works offline
 
 play at [bloop.royashbrook.com](https://bloop.royashbrook.com).
 
+inspired by the rules of suika game, not a copy of its art, names or assets.
+
 ## play locally
 
 ```sh
