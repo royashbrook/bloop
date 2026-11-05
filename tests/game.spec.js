@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { create, scoreFor, JAR } from "../src/lib/engine/game.ts";
 import { cells } from "../src/lib/skins/cells.ts";
 import { dims } from "../src/lib/skins/types.ts";
+import { MARGIN } from "../src/lib/draw.ts";
 
 // the page keeps a read-only window onto the engine: window.__bloop.state()
 const state = (page) => page.evaluate(() => window.__bloop.state());
@@ -53,8 +54,8 @@ test("a tap drops a piece where it lands, and it falls into the jar", async ({ p
   await page.touchscreen.tap(p.x, p.y);
   await expect.poll(() => count(page)).toBe(1);
   const [piece] = (await state(page)).pieces;
-  // the canvas shows a 10 unit wall margin each side of the 400 unit floor
-  expect(Math.abs(piece.x - (0.3 * (JAR.width + 20) - 10))).toBeLessThan(3);
+  // the canvas shows the glass margin each side of the 400 unit floor
+  expect(Math.abs(piece.x - (0.3 * (JAR.width + 2 * MARGIN) - MARGIN))).toBeLessThan(3);
   await expect.poll(() => state(page).then((s) => s.pieces[0].y), { timeout: 4000 }).toBeGreaterThan(JAR.height * 0.7);
 });
 
@@ -229,7 +230,7 @@ test("two of a kind that land with their outlines touching join", async ({ page 
   const tier = create(seed, dims(cells)).held;
   await page.goto(`/?seed=${seed}`);
   const box = await page.locator("#jar").boundingBox();
-  const perUnit = box.width / (JAR.width + 20);
+  const perUnit = box.width / (JAR.width + 2 * MARGIN);
   expect(perUnit).toBeGreaterThan(1.05);
   const y = box.y + box.height * 0.6;
   // the first against the left wall
@@ -242,7 +243,7 @@ test("two of a kind that land with their outlines touching join", async ({ page 
   const r = first.r;
   // aim the second so its edge sits half a unit from the first one's
   const want = first.x + 2 * r + 0.5;
-  const guess = Math.round(box.x + (want + 10) * perUnit);
+  const guess = Math.round(box.x + (want + MARGIN) * perUnit);
   await page.mouse.move(guess, y);
   await page.mouse.down();
   let best = { gap: Infinity, at: guess };

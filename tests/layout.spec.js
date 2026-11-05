@@ -49,3 +49,30 @@ for (const scheme of ["light", "dark"])
       expect(above).toBeGreaterThanOrEqual(0);
       expect(below).toBeGreaterThanOrEqual(0);
     });
+
+// the house layout (roy 2026-11-05): logo up top on the left, the version in the
+// top right corner, the jar, then the buttons along the bottom, like the other games
+for (const size of [{ width: 320, height: 568 }, { width: 390, height: 844 }])
+  test(`${size.width}x${size.height}: logo and version up top, buttons along the bottom`, async ({ page }) => {
+    await page.setViewportSize(size);
+    await page.goto("/");
+    const b = (s) => page.locator(s).boundingBox();
+    const jar = await b("#jar"), logo = await b(".hud .logo"), ver = await b(".hud .corner"), nav = await b(".nav");
+    expect(logo.y + logo.height).toBeLessThanOrEqual(jar.y);
+    expect(logo.x).toBeLessThan(size.width * 0.2);
+    expect(ver.y + ver.height).toBeLessThanOrEqual(logo.y + logo.height);
+    expect(ver.x + ver.width).toBeGreaterThan(size.width * 0.85);
+    expect(nav.y).toBeGreaterThanOrEqual(jar.y + jar.height);
+    await page.click("#nav-looks");
+    await expect(page.locator(".sheet h2")).toHaveText("looks");
+    await page.click("#close");
+    await page.click("#nav-settings");
+    await expect(page.locator(".sheet h2")).toHaveText("size & speed");
+  });
+
+// light unless the phone asks for dark
+test("a phone with no colour setting gets light", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "no-preference" });
+  await page.goto("/");
+  expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgb(244, 248, 255)");
+});

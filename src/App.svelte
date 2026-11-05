@@ -420,14 +420,18 @@
 
 <main class="play" onpointerdowncapture={sfx.wake} onpointerupcapture={sfx.wake}>
   <header class="hud">
-    <button id="about" class="icon" aria-label="about bloop" onclick={() => (sheet = "about")}>☰</button>
-    <div class="stat" id="score"><span>score</span><b>{score}</b></div>
-    <div class="stat" id="best">
-      <span class="best-label">best <span id="best-size" class="best-size" aria-label={settingsLine(size, speed)}><span class="nw">{sizeLabel(size)} ·</span> <span class="nw">{speedLabel(speed)}×</span></span></span>
-      <b>{best}{#if bestJiggled}<svg class="shake-mark" viewBox="0 0 24 24" role="img" aria-label="made with jiggle on"><title>made with jiggle on</title><rect x="8" y="4" width="8" height="16" rx="2" /><path d="M4.5 8q-2 4 0 8M19.5 8q2 4 0 8" /></svg>{/if}</b>
+    <div class="top">
+      <span class="logo">{@html wordmark}</span>
+      <span class="corner">v{__APP_VERSION__}</span>
     </div>
-    <div class="next" id="next" aria-label={`next: ${tiers[next].name}`}><canvas bind:this={nextEl}></canvas></div>
-    <button id="restart" class="icon" aria-label="start over" onclick={askRestart}>↻</button>
+    <div class="stats">
+      <div class="stat" id="score"><span>score</span><b>{score}</b></div>
+      <div class="stat" id="best">
+        <span class="best-label">best <span id="best-size" class="best-size" aria-label={settingsLine(size, speed)}><span class="nw">{sizeLabel(size)} ·</span> <span class="nw">{speedLabel(speed)}×</span></span></span>
+        <b>{best}{#if bestJiggled}<svg class="shake-mark" viewBox="0 0 24 24" role="img" aria-label="made with jiggle on"><title>made with jiggle on</title><rect x="8" y="4" width="8" height="16" rx="2" /><path d="M4.5 8q-2 4 0 8M19.5 8q2 4 0 8" /></svg>{/if}</b>
+      </div>
+      <div class="next" id="next" aria-label={`next: ${tiers[next].name}`}><span>next</span><canvas bind:this={nextEl}></canvas></div>
+    </div>
   </header>
   <div
     class="surface"
@@ -459,8 +463,13 @@
     {/if}
   </div>
   <footer class="foot">
-    <span>{#if !saved}<span class="warn">this browser is not saving your best</span>{:else}two the same make a bigger one{/if}</span>
-    <span class="corner">v{__APP_VERSION__}</span>
+    <p class="tip">{#if !saved}<span class="warn">this browser is not saving your best</span>{:else}two the same make a bigger one{/if}</p>
+    <nav class="nav" aria-label="bloop">
+      <button id="about" aria-label="menu" onclick={() => (sheet = "about")}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14" /></svg>menu</button>
+      <button id="nav-looks" onclick={() => (sheet = "looks")}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="15" r="4" /><circle cx="16" cy="13.5" r="5.5" /><circle cx="10.5" cy="6.5" r="2.5" /></svg>looks</button>
+      <button id="nav-settings" aria-label="size and speed" onclick={openSettings}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h16M4 16h16" /><circle cx="9" cy="8" r="2.5" class="knob" /><circle cx="15" cy="16" r="2.5" class="knob" /></svg>size</button>
+      <button id="restart" aria-label="start over" onclick={askRestart}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12a7 7 0 1 1-2.05-4.95" /><path d="M19.5 4v4h-4" /></svg>new jar</button>
+    </nav>
   </footer>
 </main>
 

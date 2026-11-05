@@ -21,6 +21,12 @@
   --shadow-pressed: 0 1px 0 rgba(61, 50, 48, 0.16);
   --mark-heart: #e5484d;
   --glass-shine: rgba(255, 255, 255, 0.55);
+  /* the jar: the glass, its edge, the paper label, the shadow under it */
+  --jar-glass: rgba(170, 196, 228, 0.42);
+  --jar-edge: #94a9c6;
+  --label: #fffaf0;
+  --label-ink: #8d8496;
+  --shadow-floor: rgba(61, 50, 48, 0.12);
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
@@ -36,6 +42,11 @@
     --line: #3a4560;
     --warn: #ff7d90;
     --glass-shine: rgba(255, 255, 255, 0.1);
+    --jar-glass: rgba(120, 140, 180, 0.3);
+    --jar-edge: #6d7ea3;
+    --label: #2e3649;
+    --label-ink: #a3abc2;
+    --shadow-floor: rgba(0, 0, 0, 0.35);
     --shadow: 0 3px 0 rgba(0, 0, 0, 0.45);
     --shadow-pressed: 0 1px 0 rgba(0, 0, 0, 0.45);
   }
@@ -105,17 +116,29 @@ a {
   gap: 8px;
   padding: max(8px, env(safe-area-inset-top)) 12px max(6px, env(safe-area-inset-bottom));
 }
+/* the house layout: the logo up top with the version in the corner, the scores
+   under it, the jar, then the tip and the buttons along the bottom */
 .hud {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.hud .top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.hud .logo {
+  display: flex;
+}
+.hud .logo .wordmark {
+  height: 40px;
+  width: auto;
+}
+.stats {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-.hud .icon {
-  min-width: 44px;
-  min-height: 44px;
-  padding: 0;
-  font-size: 22px;
-  line-height: 1;
 }
 .stat {
   flex: 1;
@@ -231,10 +254,42 @@ a {
 }
 .foot {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 12px;
+  flex-direction: column;
+  gap: 6px;
+}
+.tip {
+  margin: 0;
+  text-align: center;
+  font-size: 13px;
   color: var(--ink-dim);
+}
+.nav {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.nav button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-height: 58px;
+  padding: 6px 4px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.nav svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.nav svg .knob {
+  fill: var(--surface-raised);
 }
 
 /* sheets, update */
