@@ -465,7 +465,7 @@
   <footer class="foot">
     <p class="tip">{#if !saved}<span class="warn">this browser is not saving your best</span>{:else}two the same make a bigger one{/if}</p>
     <nav class="nav" aria-label="bloop">
-      <button id="about" aria-label="menu" onclick={() => (sheet = "about")}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14" /></svg>menu</button>
+      <button id="about" aria-label="menu and about" onclick={() => (sheet = "about")}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14" /></svg>menu</button>
       <button id="nav-looks" onclick={() => (sheet = "looks")}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="15" r="4" /><circle cx="16" cy="13.5" r="5.5" /><circle cx="10.5" cy="6.5" r="2.5" /></svg>looks</button>
       <button id="nav-settings" aria-label="size and speed" onclick={openSettings}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h16M4 16h16" /><circle cx="9" cy="8" r="2.5" class="knob" /><circle cx="15" cy="16" r="2.5" class="knob" /></svg>size</button>
       <button id="restart" aria-label="start over" onclick={askRestart}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12a7 7 0 1 1-2.05-4.95" /><path d="M19.5 4v4h-4" /></svg>new jar</button>

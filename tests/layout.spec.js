@@ -63,6 +63,8 @@ for (const size of [{ width: 320, height: 568 }, { width: 390, height: 844 }])
     expect(ver.y + ver.height).toBeLessThanOrEqual(logo.y + logo.height);
     expect(ver.x + ver.width).toBeGreaterThan(size.width * 0.85);
     expect(nav.y).toBeGreaterThanOrEqual(jar.y + jar.height);
+    // the house checker finds about by name: the menu button says it opens about too
+    await expect(page.getByRole("button", { name: /about/i }).first()).toBeVisible();
     await page.click("#nav-looks");
     await expect(page.locator(".sheet h2")).toHaveText("looks");
     await page.click("#close");
